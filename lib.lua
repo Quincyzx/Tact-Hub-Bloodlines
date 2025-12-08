@@ -9,8 +9,10 @@ task.wait(0.1)
 
 -- Heavily modify Rayfield's visual appearance
 if Rayfield then
-    -- Store original CreateWindow
+    -- Store all original methods to preserve them
     local OriginalCreateWindow = Rayfield.CreateWindow
+    local OriginalNotify = Rayfield.Notify
+    local OriginalLoadConfiguration = Rayfield.LoadConfiguration
     
     -- Override CreateWindow with heavily customized theme
     function Rayfield:CreateWindow(Options)
@@ -110,15 +112,18 @@ if Rayfield then
         return Window
     end
     
-    -- Modify notification appearance
-    local OriginalNotify = Rayfield.Notify
-    function Rayfield:Notify(Options)
-        -- Customize notification colors
-        if not Options then Options = {} end
-        
-        -- Override notification styling
-        return OriginalNotify(self, Options)
+    -- Ensure Notify method is preserved
+    if OriginalNotify then
+        Rayfield.Notify = OriginalNotify
     end
+    
+    -- Ensure LoadConfiguration is preserved
+    if OriginalLoadConfiguration then
+        Rayfield.LoadConfiguration = OriginalLoadConfiguration
+    end
+    
+    -- Preserve any other methods that might be needed
+    -- This ensures all Rayfield functionality remains intact
 end
 
 -- Return the modified Rayfield
