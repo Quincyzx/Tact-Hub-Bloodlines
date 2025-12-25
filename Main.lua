@@ -20,7 +20,7 @@ game.Players.LocalPlayer.OnTeleport:Connect(function(state)
         repeat task.wait() until game:IsLoaded()
         if getgenv().Executed then return end
         getgenv().Executed = true
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/coolestjackalts-boop/sfdf/refs/heads/main/s"))()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Quincyzx/Tact-Hub-Bloodlines/main/Main.lua"))()
     ]])
 end)
 
@@ -699,6 +699,7 @@ local ChakraSenseAlerter = false
 
 local selectedhaircolors = {}
 local selectednames = {}
+local selectedMissionTypes = {}
 local teleportedfruitIDs = {}
 
 --[[ STEALTH VARIABLES FOR FARMS]]--
@@ -727,6 +728,10 @@ local loopwiping = Instance.new("BoolValue")
 loopwiping.Name = "loopwiping"
 loopwiping.Value = false
 
+local christmasfarmactive = Instance.new("BoolValue")
+christmasfarmactive.Name = "christmasfarmactive"
+christmasfarmactive.Value = false
+
 local Devilactive = Instance.new("BoolValue")
 Devilactive.Name = "Devilactive"
 Devilactive.Value = false
@@ -738,6 +743,13 @@ Gripsactive.Value = false
 local GiveKnock = Instance.new("BoolValue")
 GiveKnock.Name = "GiveKnock"
 GiveKnock.Value = false
+
+local missionfarmactive = Instance.new("BoolValue")
+missionfarmactive.Name = "missionfarmactive"
+missionfarmactive.Value = false
+
+local missionautoequip = false
+local missionautom1 = false
 
 local stealthmodeactive = Instance.new("BoolValue")
 stealthmodeactive.Name = "stealthmodeactive"
@@ -2711,6 +2723,156 @@ features.Killboss = function()
             return
         end
 
+        -- Global dangerous animation monitor - checks ALL nearby mobs/bosses for the dangerous animation
+        local dangerousAnimId = "137738911755203" -- The Ringed Samurai's super dangerous animation
+        
+        if not getgenv().DangerousAnimMonitorActive then
+            getgenv().DangerousAnimMonitorActive = true
+            
+            print("[Danger Monitor] Starting global dangerous animation monitor...")
+            print("[Danger Monitor] Looking for animation ID:", dangerousAnimId)
+            
+            getgenv().DangerousAnimMonitor = game:GetService("RunService").Heartbeat:Connect(function()
+                local success, err = pcall(function()
+                    if not bossfarmactive.Value then
+                        if getgenv().DangerousAnimMonitor then
+                            getgenv().DangerousAnimMonitor:Disconnect()
+                            getgenv().DangerousAnimMonitor = nil
+                        end
+                        getgenv().DangerousAnimMonitorActive = false
+                        print("[Danger Monitor] Stopped - boss farm inactive")
+                        return
+                    end
+                    
+                    if getgenv().RingedSamuraiDodging then 
+                        return 
+                    end
+                    
+                    if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then 
+                        return 
+                    end
+                    
+                    local myPosition = plr.Character.HumanoidRootPart.Position
+                    local MaxDistance = 200 -- Check mobs within 200 studs
+                    
+                    -- Check all nearby models for the dangerous animation
+                    for _, obj in pairs(workspace:GetChildren()) do
+                        if obj:IsA("Model") and obj ~= plr.Character then
+                            local mobHrp = obj:FindFirstChild("HumanoidRootPart")
+                            local humanoid = obj:FindFirstChildOfClass("Humanoid")
+                            
+                            if mobHrp and humanoid then
+                                local distance = (mobHrp.Position - myPosition).Magnitude
+                                
+                                if distance <= MaxDistance then
+                                    local animator = humanoid:FindFirstChildOfClass("Animator")
+                                    if animator then
+                                        -- Check all currently playing animations
+                                        for _, track in pairs(animator:GetPlayingAnimationTracks()) do
+                                            if track.Animation and track.IsPlaying then
+                                                local animId = track.Animation.AnimationId
+                                                -- Extract the ID number from "rbxassetid://123456" or "http://www.roblox.com/asset/?id=123456"
+                                                local id = string.match(tostring(animId), "%d+")
+                                                
+                                                -- Debug logging for long animation IDs (likely the one we're looking for)
+                                                if id and string.len(id) >= 10 then
+                                                    -- Uncomment for verbose debugging:
+                                                    -- print("[Danger Monitor] Checking:", obj.Name, "| ID:", id, "| Target:", dangerousAnimId, "| Match:", id == dangerousAnimId)
+                                                end
+                                                
+                                                -- Check if this is the dangerous animation
+                                                if id and id == dangerousAnimId then
+                                                    print("[Danger Monitor] ========== DANGEROUS ANIMATION DETECTED! ==========")
+                                                    print("[Danger Monitor] Mob Name:", obj.Name)
+                                                    print("[Danger Monitor] Animation ID:", id)
+                                                    print("[Danger Monitor] Full Animation ID:", animId)
+                                                    print("[Danger Monitor] Time Position:", track.TimePosition)
+                                                    print("[Danger Monitor] Is Playing:", track.IsPlaying)
+                                                    
+                                                    -- React immediately when detected (no time threshold needed for super dangerous animation)
+                                                    print("[Danger Monitor] Animation is playing, triggering teleport immediately...")
+                                                    -- Dangerous animation detected from ANY mob/boss!
+                                                    getgenv().RingedSamuraiDodging = true
+                                                    
+                                                    task.spawn(function()
+                                                        local teleportSuccess, teleportErr = pcall(function()
+                                                            print("[Danger Monitor] Starting teleport sequence...")
+                                                            
+                                                            local originalPosition = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and plr.Character.HumanoidRootPart.CFrame
+                                                            
+                                                            if not originalPosition then
+                                                                warn("[Danger Monitor] ERROR: Could not get original position!")
+                                                                getgenv().RingedSamuraiDodging = false
+                                                                return
+                                                            end
+                                                            
+                                                            if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then
+                                                                warn("[Danger Monitor] ERROR: Character or HRP not found!")
+                                                                getgenv().RingedSamuraiDodging = false
+                                                                return
+                                                            end
+                                                            
+                                                            print("[Danger Monitor] Teleporting 500 studs up...")
+                                                            -- Teleport high up in the air (500 studs above)
+                                                            local highPosition = originalPosition * CFrame.new(0, 500, 0)
+                                                            local hrp = plr.Character.HumanoidRootPart
+                                                            hrp.CFrame = highPosition
+                                                            
+                                                            -- Create BodyVelocity to keep character floating in place
+                                                            local bodyVelocity = Instance.new("BodyVelocity")
+                                                            bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+                                                            bodyVelocity.Velocity = Vector3.new(0, 0, 0) -- Zero velocity to stay in place
+                                                            bodyVelocity.Parent = hrp
+                                                            
+                                                            print("[Danger Monitor] Waiting 2 seconds...")
+                                                            -- Wait 2 seconds
+                                                            task.wait(2)
+                                                            
+                                                            print("[Danger Monitor] Returning to original position...")
+                                                            -- Clean up BodyVelocity before returning
+                                                            if bodyVelocity and bodyVelocity.Parent then
+                                                                bodyVelocity:Destroy()
+                                                            end
+                                                            
+                                                            -- Return to original farming position
+                                                            if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and originalPosition then
+                                                                plr.Character.HumanoidRootPart.CFrame = originalPosition
+                                                                print("[Danger Monitor] Successfully returned to farming position")
+                                                            else
+                                                                warn("[Danger Monitor] ERROR: Could not return - character/position invalid")
+                                                            end
+                                                            
+                                                            getgenv().RingedSamuraiDodging = false
+                                                            print("[Danger Monitor] ========== Danger reaction complete ==========")
+                                                        end)
+                                                        
+                                                        if not teleportSuccess then
+                                                            warn("[Danger Monitor] ERROR in teleport function:", teleportErr)
+                                                            getgenv().RingedSamuraiDodging = false
+                                                        end
+                                                    end)
+                                                    
+                                                    return -- Exit early after detecting
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end)
+                
+                if not success then
+                    warn("[Danger Monitor] ERROR in monitor loop:", err)
+                end
+            end)
+            
+            print("[Danger Monitor] Monitor started successfully")
+        else
+            print("[Danger Monitor] Monitor already active, skipping...")
+        end
+
         if laststandactive == true then
             local playerdata = game:GetService("ReplicatedStorage")
                 :WaitForChild("Events")
@@ -3168,32 +3330,6 @@ features.Killboss = function()
                                     elseif selectedboss == "Wooden Golem" then
                                         extraoffset = 200
                                         firstdodge = true
-                                    elseif selectedboss == "The Ringed Samurai" then
-                                        -- Super dangerous animation - teleport high up in the air for 2 seconds
-                                        if not getgenv().RingedSamuraiDodging then
-                                            getgenv().RingedSamuraiDodging = true
-                                            
-                                            task.spawn(function()
-                                                local originalPosition = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and plr.Character.HumanoidRootPart.CFrame
-                                                
-                                                if originalPosition and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                                                    -- Teleport high up in the air (500 studs above)
-                                                    local highPosition = originalPosition * CFrame.new(0, 500, 0)
-                                                    plr.Character.HumanoidRootPart.CFrame = highPosition
-                                                    
-                                                    -- Wait 2 seconds
-                                                    task.wait(2)
-                                                    
-                                                    -- Return to original farming position
-                                                    if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and originalPosition then
-                                                        plr.Character.HumanoidRootPart.CFrame = originalPosition
-                                                    end
-                                                end
-                                                
-                                                getgenv().RingedSamuraiDodging = false
-                                            end)
-                                        end
-                                        firstdodge = true
                                     elseif selectedboss == "Manda" or selectedboss == "Lava Snake" then
                                         if track.TimePosition < 2.7 then
                                             extraoffset = 30
@@ -3242,6 +3378,11 @@ features.Killboss = function()
                 if bossfarmactive.Value == false then
                     warn("boss farm is disabled")
                     killing = false
+                    return
+                end
+
+                -- Skip position updates if we're dodging a dangerous animation
+                if getgenv().RingedSamuraiDodging then
                     return
                 end
 
@@ -3520,6 +3661,513 @@ features.Killboss = function()
             wait(0.1)
             game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("DataFunction"):InvokeServer(unpack({"EndBlock"}))
         end)
+    end
+end
+
+features.ChristmasFarm = function()
+    if christmasfarmactive.Value then
+        features.HandleNotLoadedIn()
+
+        if features.gotosafespot(true,false) == false then
+            return
+        end
+
+        NoFallDammage.Value = true
+
+        local selectedboss = "Frosted The Rose"
+        local bossconfig = {
+            rewards = "BarbaritRewards",
+            rewardspos = CFrame.new(-1032.42004, 262.756836, -1413.35388, -0.999958932, 5.12125879e-08, -0.00906013697, 5.05472855e-08, 1, 7.36610488e-08, 0.00906013697, 7.32000629e-08, -0.999958932),
+            argument = "activateBarbarit",
+            bosspos = CFrame.new(-1031.22461, 260.756836, -1631.61987, 0.50503391, 2.51075054e-08, 0.863099515, -3.28260157e-08, 1, -9.88212268e-09, -0.863099515, -2.33413111e-08, 0.50503391),
+            offset = 12.5,
+            dangeranim = "rbxassetid://9656290960",
+            dangertime = 0.5
+        }
+
+        -- determine weapon to autoequip
+        local weapontoautoequip = nil
+        local replicatedStorage = game:GetService("ReplicatedStorage")
+        local remote = replicatedStorage:WaitForChild("Events"):WaitForChild("DataFunction")
+        local playerdata,region,servername = remote:InvokeServer("GetData")
+
+        weapontoautoequip = playerdata["CurrentWeapon"]
+
+        local function lookforweapon()
+            local possibleweapons = {"Golden Zabunagi","Silver Zabunagi","Onyx Zabunagi", "Samehada", "Executioner's Blade"}
+            if weapontoautoequip ~= nil then
+                for _,name in pairs(possibleweapons) do
+                    if weapontoautoequip == name then
+                        return weapontoautoequip
+                    end
+                end
+            end
+
+            return nil
+        end
+
+        -- Track existing Candy Canes before boss death (to ignore old ones)
+        local existingCandyCanes = {}
+        for _, v in pairs(workspace:GetDescendants()) do
+            if v and v.Name == "Candy Cane" then
+                existingCandyCanes[v] = true
+            end
+        end
+
+        -- Table to track new Candy Canes that spawn after boss death
+        local newCandyCanes = {}
+        local candypickupconnection = nil
+
+        spawn(function()
+            -- prevent chakra loss
+            local DataEvent = RS:WaitForChild("Events"):WaitForChild("DataEvent")
+            local subCooldownValue = RS.Settings[user]:FindFirstChild("SubCooldown")
+            local cooldown = 8.5
+            local lastSubChangeTime = tick()
+
+            local subcdConnection = subCooldownValue.Changed:Connect(function(newVal)
+                lastSubChangeTime = tick()
+            end)
+
+            local function bossbuffchakra()
+                local chakra = plr.Backpack:FindFirstChild("chakra")
+                local startval = chakra.Value
+                            
+                local bosscbuffing = chakra.Changed:Connect(function(newval)
+                    if newval < startval then
+                        local lostamount = startval - newval                      
+                        local newchakra = chakra.Value + lostamount
+                        if newval + lostamount <= plr.Backpack.maxChakra.Value then
+                            local args = {
+                                [1] = "TakeChakra",
+                                [2] = lostamount * -1
+                            }
+                                    
+                            game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("DataEvent"):FireServer(unpack(args))
+                            chakra.Value = newchakra
+                        end
+
+                        startval = newval
+
+                        if chakra.Value > plr.Backpack.maxChakra.Value then
+                            chakra.Value = plr.Backpack.maxChakra.Value
+                        end
+                    else
+                        startval = newval
+                    end
+                end)
+                
+                return bosscbuffing
+            end
+
+            local bosscbuffing = bossbuffchakra()
+
+            local respawningbosschakra = plr.CharacterAdded:Connect(function()
+                if bosscbuffing then bosscbuffing:Disconnect() end
+                wait(1.3)
+                bosscbuffing = bossbuffchakra()
+            end)
+
+            -- Hide Animations and Play Chakra Sense animation
+            local track
+
+            local function hideanim()
+                local character = plr.Character or plr.CharacterAdded:Wait()
+                local humanoid = character:WaitForChild("Humanoid")
+                local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
+
+                local anim = Instance.new("Animation")
+                anim.AnimationId = "rbxassetid://9864206537"
+
+                track = animator:LoadAnimation(anim)
+                track.Priority = Enum.AnimationPriority.Core
+                track.Looped = true
+                track:Play()
+
+                local stoppinganim = animator.AnimationPlayed:Connect(function(newTrack)
+                    if newTrack ~= track then
+                        newTrack:Stop()
+                    end
+                end)
+
+                local stoppingburn = character.HumanoidRootPart.FireAilment.Played:Connect(function()
+                    game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("DataEvent"):FireServer("RemoveFireAilment")
+                end)
+                
+                return stoppinganim, stoppingburn
+            end
+
+            local stoppinganim, stoppingburn = hideanim()
+
+            local respawninganimhide = plr.CharacterAdded:Connect(function()
+                if stoppinganim then stoppinganim:Disconnect() end
+                if stoppingburn then stoppingburn:Disconnect() end
+                wait(1.3)
+                stoppinganim, stoppingburn = hideanim()
+            end)
+
+            task.spawn(function()
+                while christmasfarmactive.Value do 
+                    task.wait()
+
+                    local userSettings = RS.Settings:FindFirstChild(user)
+                    if not userSettings then continue end
+
+                    local meleeCooldown = userSettings:WaitForChild("MeleeCooldown")
+
+                    if plr.Character and plr.Character:FindFirstChild("FakeHead") and plr.Character:FindFirstChild("FakeHead"):FindFirstChild("skillGUI") and autoequipweapon and weapontoautoequip then
+                        if plr.Character:FindFirstChild("FakeHead"):FindFirstChild("skillGUI").skillName.Text ~= weapontoautoequip then
+                            wait(0.4)
+                            RS.Events.DataEvent:FireServer("Item", "Unselected", plr.Character:FindFirstChild("FakeHead"):FindFirstChild("skillGUI").skillName.Text)
+                            RS.Events.DataEvent:FireServer("Item", "Selected", weapontoautoequip)
+                        end
+                    end
+
+                    if meleeCooldown then
+                        local args = { [1] = "CheckMeleeHit", [3] = "NormalAttack", [4] = false }
+                        RS.Events.DataEvent:FireServer(unpack(args))
+                        task.wait(0.15)
+                    else
+                        task.wait()
+                    end
+                end
+            end)
+
+            while christmasfarmactive.Value == true do 
+                wait(0.2)
+                if tick() - lastSubChangeTime >= cooldown then
+                    if plr.Character and plr.Character.HumanoidRootPart then
+                        DataEvent:FireServer("TakeDamage", 0.000000001)
+                        DataEvent:FireServer("Dash", "Sub", plr.Character.HumanoidRootPart.Position)
+                    end
+                end
+
+                if RS.Settings:FindFirstChild(user) and RS.Settings[user]:FindFirstChild("Blocking") then
+                    if RS.Settings[user]:FindFirstChild("Blocking").Value == false then
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("DataFunction"):InvokeServer(unpack({"Block"}))
+                    end
+                end
+
+                local args = {
+                    "Charging"
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("DataEvent"):FireServer(unpack(args))
+            end
+
+            -- Cleanup
+            if respawninganimhide then respawninganimhide:Disconnect() end
+            if stoppinganim then stoppinganim:Disconnect() end
+            if stoppingburn then stoppingburn:Disconnect() end
+            if track then track:Stop() end
+            if subcdConnection then subcdConnection:Disconnect() end
+            if bosscbuffing then bosscbuffing:Disconnect() end
+            if respawningbosschakra then respawningbosschakra:Disconnect() end
+        end)
+
+        if nocooldownm1 then
+            local heavyweapon = lookforweapon()
+            if heavyweapon == nil then
+                Notify("Missing requirements.","You need a Heavy Weapon for inf M1.",2,"info")
+                return
+            else
+                local DataEvent = RS:WaitForChild("Events"):WaitForChild("DataEvent")
+
+                spawn(function()
+                    while christmasfarmactive.Value do
+                        wait()
+
+                        if RS.Settings:FindFirstChild(user) and RS.Settings[user]:FindFirstChild("CombatCount") then
+                            if RS.Settings[user]:FindFirstChild("CurrentWeapon") then
+                                if RS.Settings[user]:FindFirstChild("CurrentWeapon").Value ~= "Fist" and RS.Settings[user]:FindFirstChild("CurrentWeapon").Value ~= "Tai" then
+                                    game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("DataEvent"):FireServer("Item","Unselected", weapontoautoequip)
+                                end
+                            end
+
+                            if RS.Settings[user].CombatCount.Value > 3 then
+                                DataEvent:FireServer("Item", "Selected", weapontoautoequip)
+                                DataEvent:FireServer("Item", "Unselected", weapontoautoequip)
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+
+        local function checkbossstatus()
+            -- Check for Frosted The Rose boss in workspace (80% chance)
+            for _, v in pairs(workspace:GetChildren()) do
+                if v.Name == "Frosted The Rose" then
+                    if v:FindFirstChild("HumanoidRootPart") then
+                        if not v:FindFirstChild("WorldEvent") and not v:FindFirstChild("npcImmuneTag") and Teleport(v:FindFirstChild("HumanoidRootPart").CFrame,false,true) == true then
+                            return true, v:FindFirstChild("HumanoidRootPart"), "Frosted The Rose"
+                        end
+                    end
+                end
+            end
+
+            -- Check for Barbarit The Rose boss in workspace (20% chance - original)
+            for _, v in pairs(workspace:GetChildren()) do
+                if v.Name == "Barbarit The Rose" then
+                    if v:FindFirstChild("HumanoidRootPart") then
+                        if not v:FindFirstChild("WorldEvent") and not v:FindFirstChild("npcImmuneTag") then
+                            -- If serverhop is enabled, serverhop immediately
+                            if serverhopnoboss then
+                                features.TeleportRandomServer()
+                                return false, nil, nil
+                            else
+                                -- Otherwise, kill the original Barbarit The Rose
+                                if Teleport(v:FindFirstChild("HumanoidRootPart").CFrame,false,true) == true then
+                                    return true, v:FindFirstChild("HumanoidRootPart"), "Barbarit The Rose"
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+            -- Check if rewards are available (boss not spawned yet)
+            if workspace:FindFirstChild(bossconfig.rewards) then
+                if workspace:FindFirstChild(bossconfig.rewards):FindFirstChild("Part") and workspace:FindFirstChild(bossconfig.rewards):FindFirstChild("Part").Transparency == 0 then
+                    return false, nil, nil
+                end
+            end
+            
+            -- Try to spawn the boss - teleport to the boss position
+            if Teleport(bossconfig.bosspos) == false then return false, nil, nil end
+
+            wait(0.25)
+
+            local args = {
+                [1] = bossconfig.argument
+            }
+                
+            game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("DataEvent"):FireServer(unpack(args))
+
+            plr.Character.Humanoid.Jump = true
+            wait(0.3)
+
+            -- Wait for boss to spawn (check multiple times)
+            local spawnTimeout = tick() + 5
+            while tick() < spawnTimeout and christmasfarmactive.Value do
+                -- Check for Frosted The Rose first (preferred)
+                for _, v in pairs(workspace:GetChildren()) do
+                    if v.Name == "Frosted The Rose" then
+                        if v:FindFirstChild("HumanoidRootPart") then
+                            if not v:FindFirstChild("WorldEvent") and not v:FindFirstChild("npcImmuneTag") and Teleport(v:FindFirstChild("HumanoidRootPart").CFrame,false,true) == true then
+                                return true, v:FindFirstChild("HumanoidRootPart"), "Frosted The Rose"
+                            end
+                        end
+                    end
+                end
+                
+                -- Check for Barbarit The Rose (20% chance)
+                for _, v in pairs(workspace:GetChildren()) do
+                    if v.Name == "Barbarit The Rose" then
+                        if v:FindFirstChild("HumanoidRootPart") then
+                            if not v:FindFirstChild("WorldEvent") and not v:FindFirstChild("npcImmuneTag") then
+                                -- If serverhop is enabled, serverhop immediately
+                                if serverhopnoboss then
+                                    features.TeleportRandomServer()
+                                    return false, nil, nil
+                                else
+                                    -- Otherwise, kill the original Barbarit The Rose
+                                    if Teleport(v:FindFirstChild("HumanoidRootPart").CFrame,false,true) == true then
+                                        return true, v:FindFirstChild("HumanoidRootPart"), "Barbarit The Rose"
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+                wait(0.1)
+            end
+            
+            return false, nil, nil
+        end
+
+        local function finishboss(bosshrp)
+            local killing = true
+            
+            local function tpandreacttoboss(bosshumanoidrootpart)
+                local extraoffset = 0
+                local firstdodge = false
+
+                local animator = bosshumanoidrootpart.Parent.Humanoid:FindFirstChildOfClass("Animator")
+                if animator then
+                    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                        if track.Animation.AnimationId == bossconfig.dangeranim then
+                            if track.TimePosition > bossconfig.dangertime then
+                                extraoffset = 2
+                                firstdodge = true
+                            end
+                        end
+                    end
+                end
+
+                local abovePos = bosshrp.Position + Vector3.new(0, bossconfig.offset + extraoffset, 0)
+                local lookDown = CFrame.new(abovePos, bosshrp.Position)
+
+                plr.Character.HumanoidRootPart.CFrame = lookDown
+            end
+
+            wait(0.5)
+
+            local tweening = game:GetService("RunService").Heartbeat:Connect(function()
+                if christmasfarmactive.Value == false then
+                    killing = false
+                    return
+                end
+
+                if bosshrp and bosshrp.Parent ~= nil and bosshrp.Parent:FindFirstChild("Humanoid") then
+                    if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                        if RS.Settings:FindFirstChild(user) and RS.Settings[user]:FindFirstChild("Knocked") then
+                            if RS.Settings[user]:FindFirstChild("Knocked").Value == true then
+                                if plr.Character.HumanoidRootPart then
+                                    features.gotosafespot()
+                                end
+                            else
+                                tpandreacttoboss(bosshrp)
+                            end
+                        end
+                    end
+                    
+                    -- Grip boss when knocked
+                    if bosshrp.Parent:FindFirstChild("Settings"):FindFirstChild("Knocked").Value == true then
+                        plr.Character.HumanoidRootPart.CFrame = bosshrp.CFrame
+                        local args = {
+                            [1] = "Grip"
+                        }
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("DataEvent"):FireServer(unpack(args))
+                    end
+                else
+                    killing = false
+                end
+            end)
+            
+            while killing == true do
+                wait()
+            end
+            
+            if tweening then             
+                tweening:Disconnect()
+            end
+
+            if christmasfarmactive.Value == false then return end
+
+            -- Listen for NEW Candy Canes that spawn after boss death
+            if candypickupconnection then
+                candypickupconnection:Disconnect()
+            end
+            candypickupconnection = workspace.ChildAdded:Connect(function(newthing)
+                if not newthing then return end
+                -- Check if it's a new Candy Cane (not in existing list)
+                if newthing.Name == "Candy Cane" and not existingCandyCanes[newthing] then
+                    -- Check if it has ItemDetector
+                    if newthing:FindFirstChild("ItemDetector") then
+                        if not table.find(newCandyCanes, newthing) then
+                            table.insert(newCandyCanes, newthing)
+                        end
+                    end
+                end
+            end)
+
+            -- Wait a moment for Candy Canes to spawn
+            wait(1.5)
+            
+            -- Also check for any Candy Canes that already spawned
+            for _, v in pairs(workspace:GetChildren()) do
+                if v and v.Name == "Candy Cane" and not existingCandyCanes[v] then
+                    if v:FindFirstChild("ItemDetector") then
+                        if not table.find(newCandyCanes, v) then
+                            table.insert(newCandyCanes, v)
+                        end
+                    end
+                end
+            end
+
+            -- Pickup loop for NEW Candy Canes
+            local clickedCandyCanes = {}
+            local startTime = tick()
+            while (tick() - startTime < 15) and christmasfarmactive.Value do
+                for i = #newCandyCanes, 1, -1 do
+                    local candyCane = newCandyCanes[i]
+                    
+                    -- Skip if already clicked or doesn't exist
+                    if clickedCandyCanes[candyCane] or not candyCane or not candyCane:IsDescendantOf(workspace) then
+                        table.remove(newCandyCanes, i)
+                    else
+                        local itemDetector = candyCane:FindFirstChild("ItemDetector")
+                        if itemDetector then
+                            -- Teleport close to the Candy Cane (within 12 studs for ItemDetector)
+                            if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                                local candyPos = candyCane:FindFirstChildOfClass("BasePart")
+                                if candyPos then
+                                    local distance = (plr.Character.HumanoidRootPart.Position - candyPos.Position).Magnitude
+                                    
+                                    -- If too far, teleport closer (within 10 studs to be safe)
+                                    if distance > 10 then
+                                        local teleportCFrame = candyPos.CFrame * CFrame.new(0, 0, -8)
+                                        plr.Character.HumanoidRootPart.CFrame = teleportCFrame
+                                        task.wait(0.2)
+                                    end
+                                    
+                                    -- Click the ItemDetector
+                                    fireclickdetector(itemDetector)
+                                    clickedCandyCanes[candyCane] = true
+                                    table.remove(newCandyCanes, i)
+                                    task.wait(0.1)
+                                end
+                            end
+                        else
+                            -- No ItemDetector, remove from list
+                            table.remove(newCandyCanes, i)
+                        end
+                    end
+                end
+                
+                -- If all new Candy Canes are clicked, we're done
+                if #newCandyCanes == 0 then
+                    break
+                end
+                
+                task.wait(0.1)
+            end
+            
+            -- Disconnect the connection after pickup is done
+            if candypickupconnection then
+                candypickupconnection:Disconnect()
+                candypickupconnection = nil
+            end
+
+            features.gotosafespot()
+        end
+
+        -- Main farm loop
+        local lookingforbosscounter = 0
+        while christmasfarmactive.Value do
+            wait()
+            if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                local bossthere, bosshrp, bossname = checkbossstatus()
+                if bossthere and bosshrp then
+                    lookingforbosscounter = 0
+                    finishboss(bosshrp)
+                elseif serverhopnoboss == true then
+                    lookingforbosscounter = lookingforbosscounter + 1
+                    if lookingforbosscounter > 10 then
+                        features.TeleportRandomServer()
+                        return
+                    end
+                end
+            end
+        end
+
+        -- Cleanup
+        if candypickupconnection then
+            candypickupconnection:Disconnect()
+        end
+
+        NoFallDammage.Value = false
+        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("DataFunction"):InvokeServer(unpack({"EndBlock"}))
     end
 end
 
@@ -3948,6 +4596,449 @@ end
 -- Candy farming feature removed
 features.FarmCandy = function()
     return -- Disabled
+end
+
+-- Auto Missions System
+features.AutoMissions = function()
+    if not missionfarmactive.Value then
+        return
+    end
+    
+    features.HandleNotLoadedIn()
+    
+    -- Get player's village and weapon
+    local replicatedStorage = game:GetService("ReplicatedStorage")
+    local remote = replicatedStorage:WaitForChild("Events"):WaitForChild("DataFunction")
+    local playerdata = remote:InvokeServer("GetData")
+    local playerVillage = playerdata["Village"]
+    local weapontoautoequip = playerdata["CurrentWeapon"]
+    
+    if not playerVillage then
+        warn("[Auto Missions] Could not get player village")
+        return
+    end
+    
+    -- Find Mission Board for player's village
+    local missionBoards = workspace:FindFirstChild("Mission Boards")
+    if not missionBoards then
+        warn("[Auto Missions] Mission Boards not found")
+        return
+    end
+    
+    local villageMissionBoard = nil
+    for _, board in pairs(missionBoards:GetChildren()) do
+        if board.Name == "Mission Board" and board:GetAttribute("Village") == playerVillage then
+            villageMissionBoard = board
+            break
+        end
+    end
+    
+    if not villageMissionBoard then
+        warn("[Auto Missions] Mission Board for village", playerVillage, "not found")
+        return
+    end
+    
+    -- Find available missions matching selected types
+    local availableMissions = {}
+    for _, mission in pairs(villageMissionBoard:GetChildren()) do
+        if mission.Name == "Mission" then
+            -- Try different possible attribute names
+            local missionType = mission:GetAttribute("MissionType") or 
+                               mission:GetAttribute("Type") or 
+                               mission:GetAttribute("Mission") or
+                               mission:GetAttribute("Name")
+            
+            -- Also check if mission type is in the mission's name or other properties
+            if not missionType then
+                -- Check all attributes
+                for attrName, attrValue in pairs(mission:GetAttributes()) do
+                    if type(attrValue) == "string" and (attrName:lower():find("mission") or attrName:lower():find("type")) then
+                        missionType = attrValue
+                        break
+                    end
+                end
+            end
+            
+            if missionType and #selectedMissionTypes > 0 then
+                -- Check if mission type matches any selected type (case-insensitive partial match)
+                for _, selectedType in pairs(selectedMissionTypes) do
+                    if missionType:lower():find(selectedType:lower()) or selectedType:lower():find(missionType:lower()) then
+                        table.insert(availableMissions, mission)
+                        break
+                    end
+                end
+            end
+        end
+    end
+    
+    if #availableMissions == 0 then
+        warn("[Auto Missions] No available missions of selected types")
+        task.wait(2)
+        return
+    end
+    
+    -- Select a random mission from available ones
+    local selectedMission = availableMissions[math.random(1, #availableMissions)]
+    local missionType = selectedMission:GetAttribute("MissionType") or 
+                       selectedMission:GetAttribute("Type") or 
+                       selectedMission:GetAttribute("Mission") or
+                       selectedMission:GetAttribute("Name")
+    
+    -- Teleport to mission board before clicking (ClickDetectors have range)
+    if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+        -- Try to find a part close to the selected mission
+        local missionPart = selectedMission:FindFirstChildOfClass("BasePart")
+        if not missionPart then
+            -- If mission has no part, find the closest part on the board
+            local boardParts = {}
+            for _, part in pairs(villageMissionBoard:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    table.insert(boardParts, part)
+                end
+            end
+            if #boardParts > 0 then
+                missionPart = boardParts[1]
+            end
+        end
+        
+        if missionPart then
+            -- Teleport close to the mission (a few studs in front)
+            local teleportCFrame = missionPart.CFrame * CFrame.new(0, 0, -5)
+            Teleport(teleportCFrame)
+            print("[Auto Missions] Teleported to mission board near mission")
+            task.wait(0.5)
+        else
+            warn("[Auto Missions] Could not find part to teleport to on mission board")
+        end
+    end
+    
+    -- Click the mission's ClickDetector
+    local clickDetector = selectedMission:FindFirstChildOfClass("ClickDetector")
+    if not clickDetector then
+        warn("[Auto Missions] No ClickDetector found on mission")
+        task.wait(2)
+        return
+    end
+    
+    -- Fire the ClickDetector
+    fireclickdetector(clickDetector)
+    print("[Auto Missions] Claimed mission:", missionType)
+    task.wait(1)
+    
+    -- Remember our position before claiming mission to find our spawner
+    local myPositionBeforeClaim = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and plr.Character.HumanoidRootPart.Position
+    
+    -- Check if this is a Corrupted Point mission
+    local isCorruptedPoint = false
+    if missionType and (missionType:lower():find("corrupted") or missionType:lower():find("point")) then
+        isCorruptedPoint = true
+    end
+    
+    -- Setup auto M1 and auto equip weapon (only if toggles are enabled)
+    local DataEvent = RS:WaitForChild("Events"):WaitForChild("DataEvent")
+    local autoM1Connection = nil
+    
+    if (missionautoequip or missionautom1) and weapontoautoequip then
+        autoM1Connection = game:GetService("RunService").Heartbeat:Connect(function()
+            if not missionfarmactive.Value then
+                if autoM1Connection then
+                    autoM1Connection:Disconnect()
+                    autoM1Connection = nil
+                end
+                return
+            end
+            
+            if RS.Settings:FindFirstChild(user) and RS.Settings[user]:FindFirstChild("CombatCount") then
+                if missionautoequip then
+                    if RS.Settings[user]:FindFirstChild("CurrentWeapon") then
+                        if RS.Settings[user]:FindFirstChild("CurrentWeapon").Value ~= "Fist" and RS.Settings[user]:FindFirstChild("CurrentWeapon").Value ~= "Tai" then
+                            DataEvent:FireServer("Item","Unselected", weapontoautoequip)
+                        end
+                    end
+                end
+                
+                if missionautom1 and RS.Settings[user].CombatCount.Value > 3 then
+                    DataEvent:FireServer("Item", "Selected", weapontoautoequip)
+                    DataEvent:FireServer("Item", "Unselected", weapontoautoequip)
+                end
+            end
+        end)
+    end
+    
+    -- Handle Corrupted Point mission
+    if isCorruptedPoint then
+        print("[Auto Missions] Corrupted Point mission - waiting for spawn...")
+        
+        -- Wait for CorruptedPoint to spawn
+        local corruptedPoint = nil
+        local maxWaitTime = 30
+        local waitTime = 0
+        
+        while waitTime < maxWaitTime and missionfarmactive.Value do
+            for _, obj in pairs(workspace:GetChildren()) do
+                if obj.Name == "CorruptedPoint" then
+                    corruptedPoint = obj
+                    break
+                end
+            end
+            
+            if corruptedPoint then
+                break
+            end
+            
+            task.wait(0.5)
+            waitTime = waitTime + 0.5
+        end
+        
+        if not corruptedPoint then
+            warn("[Auto Missions] CorruptedPoint did not spawn in time")
+            if autoM1Connection then
+                autoM1Connection:Disconnect()
+            end
+            task.wait(2)
+            return
+        end
+        
+        print("[Auto Missions] Found CorruptedPoint - farming under map")
+        
+        -- Farm CorruptedPoint under the map
+        local corruptedMain = corruptedPoint:FindFirstChild("Main")
+        if corruptedMain then
+            while missionfarmactive.Value and corruptedPoint and corruptedPoint.Parent do
+                if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then
+                    task.wait(1)
+                    return
+                end
+                
+                local targetPos = corruptedMain.Position
+                -- Teleport under the map at Y = -147
+                plr.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos.X, -147, targetPos.Z)
+                
+                task.wait()
+            end
+        end
+        
+        print("[Auto Missions] CorruptedPoint destroyed, mission complete")
+        if autoM1Connection then
+            autoM1Connection:Disconnect()
+        end
+        task.wait(2)
+        return
+    end
+    
+    -- For other missions, find the spawner location
+    local missionLocations = workspace:FindFirstChild("Debris")
+    if not missionLocations then
+        warn("[Auto Missions] Debris not found")
+        if autoM1Connection then
+            autoM1Connection:Disconnect()
+        end
+        return
+    end
+    
+    local missionLocationsFolder = missionLocations:FindFirstChild("Mission Locations")
+    if not missionLocationsFolder then
+        warn("[Auto Missions] Mission Locations not found")
+        if autoM1Connection then
+            autoM1Connection:Disconnect()
+        end
+        return
+    end
+    
+    local villageSpawners = missionLocationsFolder:FindFirstChild(playerVillage)
+    if not villageSpawners then
+        warn("[Auto Missions] Spawners for village", playerVillage, "not found")
+        if autoM1Connection then
+            autoM1Connection:Disconnect()
+        end
+        return
+    end
+    
+    local spawnersFolder = villageSpawners:FindFirstChild("Spawners")
+    if not spawnersFolder then
+        warn("[Auto Missions] Spawners folder not found")
+        if autoM1Connection then
+            autoM1Connection:Disconnect()
+        end
+        return
+    end
+    
+    -- Wait for spawner to appear after claiming mission (spawners are created after quest is claimed)
+    local targetSpawner = nil
+    local maxSpawnerWaitTime = 10
+    local spawnerWaitTime = 0
+    
+    print("[Auto Missions] Waiting for spawner to appear after claiming mission...")
+    while spawnerWaitTime < maxSpawnerWaitTime and missionfarmactive.Value do
+        -- Find the spawner with MissionMarker that's closest to where we were when we claimed
+        local closestSpawner = nil
+        local closestDistance = math.huge
+        
+        for _, spawner in pairs(spawnersFolder:GetChildren()) do
+            if spawner:IsA("BasePart") and spawner:FindFirstChild("MissionMarker") then
+                -- If we have our position before claim, find the closest one
+                if myPositionBeforeClaim then
+                    local distance = (spawner.Position - myPositionBeforeClaim).Magnitude
+                    if distance < closestDistance then
+                        closestDistance = distance
+                        closestSpawner = spawner
+                    end
+                else
+                    -- If no position, just use the first one found
+                    closestSpawner = spawner
+                    break
+                end
+            end
+        end
+        
+        if closestSpawner then
+            targetSpawner = closestSpawner
+            print("[Auto Missions] Found spawner at distance:", closestDistance)
+            break
+        end
+        
+        task.wait(0.5)
+        spawnerWaitTime = spawnerWaitTime + 0.5
+    end
+    
+    if not targetSpawner then
+        warn("[Auto Missions] No spawner with MissionMarker found after waiting")
+        if autoM1Connection then
+            autoM1Connection:Disconnect()
+        end
+        task.wait(2)
+        return
+    end
+    
+    -- Teleport to spawner (NPCs spawn after teleporting to spawner)
+    if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+        Teleport(targetSpawner.CFrame)
+        print("[Auto Missions] Teleported to spawner - waiting for NPCs to spawn...")
+        task.wait(2)
+    end
+    
+    -- Wait for NPCs to spawn after teleporting to spawner (NPCs are created after teleporting)
+    local spawnedNPCs = {}
+    local maxWaitTime = 30
+    local waitTime = 0
+    
+    while waitTime < maxWaitTime and missionfarmactive.Value do
+        -- Check for spawned NPCs near the spawner (only check NPCs that belong to our mission)
+        for _, obj in pairs(workspace:GetChildren()) do
+            if obj:IsA("Model") and obj ~= plr.Character then
+                local hrp = obj:FindFirstChild("HumanoidRootPart")
+                local humanoid = obj:FindFirstChildOfClass("Humanoid")
+                
+                if hrp and humanoid and (hrp.Position - targetSpawner.Position).Magnitude < 50 then
+                    local npcName = obj.Name
+                    
+                    -- Check if it's a mission NPC we should farm
+                    if npcName:find("Manda") or npcName:find("Barbarit") or npcName:find("Bandit") or npcName:find("Cratos") or npcName:find("Boss") then
+                        -- Check if we already have this NPC
+                        local alreadyAdded = false
+                        for _, existingNPC in pairs(spawnedNPCs) do
+                            if existingNPC == obj then
+                                alreadyAdded = true
+                                break
+                            end
+                        end
+                        
+                        if not alreadyAdded then
+                            table.insert(spawnedNPCs, obj)
+                            print("[Auto Missions] Found NPC:", npcName)
+                        end
+                    end
+                end
+            end
+        end
+        
+        if #spawnedNPCs > 0 then
+            break
+        end
+        
+        task.wait(0.5)
+        waitTime = waitTime + 0.5
+    end
+    
+    if #spawnedNPCs == 0 then
+        warn("[Auto Missions] No NPCs spawned in time")
+        if autoM1Connection then
+            autoM1Connection:Disconnect()
+        end
+        task.wait(2)
+        return
+    end
+    
+    print("[Auto Missions] Starting to farm", #spawnedNPCs, "NPC(s)")
+    
+    -- Farm loop - continue until all NPCs are dead
+    while missionfarmactive.Value do
+        if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then
+            task.wait(1)
+            return
+        end
+        
+        -- Remove dead NPCs from list
+        for i = #spawnedNPCs, 1, -1 do
+            local npc = spawnedNPCs[i]
+            if not npc or not npc.Parent or not npc:FindFirstChild("Humanoid") or npc:FindFirstChild("Humanoid").Health <= 0 then
+                table.remove(spawnedNPCs, i)
+            end
+        end
+        
+        -- Check if all NPCs are dead
+        if #spawnedNPCs == 0 then
+            print("[Auto Missions] All NPCs defeated, mission complete")
+            break
+        end
+        
+        -- Farm the first alive NPC
+        local targetNPC = spawnedNPCs[1]
+        if targetNPC and targetNPC.Parent and targetNPC:FindFirstChild("HumanoidRootPart") then
+            local npcHrp = targetNPC:FindFirstChild("HumanoidRootPart")
+            local npcName = targetNPC.Name
+            
+            -- For Manda, use same logic as boss farm (offset 35, with danger anim check)
+            if npcName:find("Manda") then
+                local extraoffset = 0
+                local animator = targetNPC:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator")
+                if animator then
+                    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                        -- Check for Manda's danger anim (same as boss farm)
+                        if track.Animation.AnimationId == "rbxassetid://9954909571" then
+                            if track.TimePosition > 0.4 and track.TimePosition < 2.7 then
+                                extraoffset = 30
+                                break
+                            end
+                        end
+                    end
+                end
+                local abovePos = npcHrp.Position + Vector3.new(0, 35 + extraoffset, 0)
+                local lookDown = CFrame.new(abovePos, npcHrp.Position)
+                plr.Character.HumanoidRootPart.CFrame = lookDown
+            elseif npcName:find("Barbarit") then
+                -- Barbarit uses offset 12.5
+                local abovePos = npcHrp.Position + Vector3.new(0, 12.5, 0)
+                local lookDown = CFrame.new(abovePos, npcHrp.Position)
+                plr.Character.HumanoidRootPart.CFrame = lookDown
+            else
+                -- For bandits, cratos, and bosses, hover lower (5 studs) so we can actually hit them
+                local abovePos = npcHrp.Position + Vector3.new(0, 5, 0)
+                local lookDown = CFrame.new(abovePos, npcHrp.Position)
+                plr.Character.HumanoidRootPart.CFrame = lookDown
+            end
+        end
+        
+        task.wait()
+    end
+    
+    -- Cleanup
+    if autoM1Connection then
+        autoM1Connection:Disconnect()
+    end
+    
+    print("[Auto Missions] Mission complete, waiting before next mission...")
+    task.wait(3)
 end
 
 features.EventNotify = function()
@@ -7371,6 +8462,48 @@ FarmsTab:CreateToggle({
     end,
  })
 
+-----------------------
+FarmsTab:CreateSection("Christmas Event")
+-----------------------
+
+FarmsTab:CreateToggle({
+    Name = "Christmas Farm (Frosted The Rose) 🔹",
+    CurrentValue = false,
+    Flag = "ChristmasFarmToggle", 
+    Callback = function(Value)
+        christmasfarmactive.Value = Value
+        spawn(function()
+            features.ChristmasFarm()
+        end)
+    end,
+ })
+
+FarmsTab:CreateToggle({
+    Name = "Infinite M1s (only Tai/Fist)",
+    CurrentValue = false,
+    Flag = "ChristmasInfiniteM1sToggle", 
+    Callback = function(Value)
+        nocooldownm1 = Value
+    end,
+ })
+
+FarmsTab:CreateToggle({
+    Name = "Auto Equip Weapon",
+    CurrentValue = false,
+    Flag = "ChristmasAutoEquipWeapon",
+    Callback = function(Value)
+        autoequipweapon = Value
+    end,
+ })
+
+FarmsTab:CreateToggle({
+    Name = "Serverhop when Bosses dead",
+    CurrentValue = false,
+    Flag = "ChristmasHopIfNoBoss",
+    Callback = function(Value)
+        serverhopnoboss = Value
+    end,
+ })
 
 -----------------------
 FarmsTab:CreateSection("Tree Hopping")
@@ -7755,6 +8888,57 @@ ProgTab:CreateDropdown({
 })
 
 ProgTab:CreateSection("")
+
+-----------------------
+ProgTab:CreateSection("Auto Missions")
+-----------------------
+
+ProgTab:CreateToggle({
+    Name = "Auto Missions 🔹",
+    CurrentValue = false,
+    Flag = "AutoMissionsToggle",
+    Callback = function(Value)
+        missionfarmactive.Value = Value
+        spawn(function()
+            while missionfarmactive.Value do
+                features.AutoMissions()
+                task.wait(1)
+            end
+        end)
+    end,
+})
+
+ProgTab:CreateDropdown({
+    Name = "Select Mission Types",
+    Options = {"Defeat a Bandit", "Crate Delivery", "Bandit Camp", "Corrupted Point", "Defeat a Boss", "Capture Manda", "Cratos"},
+    CurrentOption = {},
+    MultipleOptions = true,
+    Flag = "SelectedMissionTypes",
+    Callback = function(CurrentValue)
+        selectedMissionTypes = {}
+        for _, value in pairs(CurrentValue) do
+            table.insert(selectedMissionTypes, value)
+        end
+    end,
+})
+
+ProgTab:CreateToggle({
+    Name = "Auto Equip Weapon",
+    CurrentValue = false,
+    Flag = "MissionAutoEquipToggle",
+    Callback = function(Value)
+        missionautoequip = Value
+    end,
+})
+
+ProgTab:CreateToggle({
+    Name = "Auto M1",
+    CurrentValue = false,
+    Flag = "MissionAutoM1Toggle",
+    Callback = function(Value)
+        missionautom1 = Value
+    end,
+})
 
 -----------------------
 TeleportsTab:CreateSection("Teleports")
@@ -8601,4 +9785,5 @@ spawn(function()
 end)
 
 wait()
+Rayfield:LoadConfiguration()
 Rayfield:LoadConfiguration()
