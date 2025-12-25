@@ -3707,13 +3707,17 @@ features.ChristmasFarm = function()
         end
 
         -- Track existing Candy Canes before boss death (to ignore old ones)
+        print("[Christmas Farm] Tracking existing Candy Canes...")
         local existingCandyCanes = {}
+        local existingCount = 0
         for _, v in pairs(workspace:GetDescendants()) do
             if v and v.Name == "Candy Cane" then
                 existingCandyCanes[v] = true
+                existingCount = existingCount + 1
             end
         end
-
+        print("[Christmas Farm] Found", existingCount, "existing Candy Canes to ignore")
+        
         -- Table to track new Candy Canes that spawn after boss death
         local newCandyCanes = {}
         local candypickupconnection = nil
@@ -4052,35 +4056,121 @@ features.ChristmasFarm = function()
                 tweening:Disconnect()
             end
 
-            if christmasfarmactive.Value == false then return end
+            print("[Christmas Farm] ========== BOSS DIED ==========")
+            print("[Christmas Farm] Boss HumanoidRootPart:", bosshrp)
+            print("[Christmas Farm] Boss Parent:", bosshrp and bosshrp.Parent or "nil")
+            if bosshrp and bosshrp.Parent then
+                print("[Christmas Farm] Boss Name:", bosshrp.Parent.Name)
+            end
+
+            if christmasfarmactive.Value == false then 
+                print("[Christmas Farm] Farm disabled, skipping Candy Cane pickup")
+                return 
+            end
+
+            print("[Christmas Farm] Setting up Candy Cane pickup...")
 
             -- Listen for NEW Candy Canes that spawn after boss death
             if candypickupconnection then
+                print("[Christmas Farm] Disconnecting old connection")
                 candypickupconnection:Disconnect()
             end
+            
+            print("[Christmas Farm] Setting up ChildAdded connection for Candy Canes")
             candypickupconnection = workspace.ChildAdded:Connect(function(newthing)
-                if not newthing then return end
-                -- Check if it's a new Candy Cane (not in existing list)
-                if newthing.Name == "Candy Cane" and not existingCandyCanes[newthing] then
-                    -- Check if it has ItemDetector
-                    if newthing:FindFirstChild("ItemDetector") then
-                        if not table.find(newCandyCanes, newthing) then
-                            table.insert(newCandyCanes, newthing)
+                local success, err = pcall(function()
+                    if not newthing then 
+                        print("[Christmas Farm] ChildAdded: newthing is nil")
+                        return 
+                    end
+                    
+                    print("[Christmas Farm] ChildAdded detected:", newthing.Name, "| Type:", newthing.ClassName)
+                    
+                    -- Check if it's a new Candy Cane (not in existing list)
+                    if newthing.Name == "Candy Cane" then
+                        print("[Christmas Farm] Found Candy Cane! Checking if it's new...")
+                        if existingCandyCanes[newthing] then
+                            print("[Christmas Farm] Candy Cane is OLD (in existing list), ignoring")
+                            return
+                        end
+                        
+                        print("[Christmas Farm] Candy Cane is NEW! Checking for ItemDetector...")
+                        local itemDetector = newthing:FindFirstChild("ItemDetector")
+                        if itemDetector then
+                            print("[Christmas Farm] Found ItemDetector! Adding to pickup list")
+                            if not table.find(newCandyCanes, newthing) then
+                                table.insert(newCandyCanes, newthing)
+                                print("[Christmas Farm] Added Candy Cane to list. Total new Candy Canes:", #newCandyCanes)
+                            else
+                                print("[Christmas Farm] Candy Cane already in list, skipping")
+                            end
+                        else
+                            print("[Christmas Farm] WARNING: Candy Cane has NO ItemDetector!")
+                            -- Check what children it has
+                            local children = {}
+                            for _, child in pairs(newthing:GetChildren()) do
+                                table.insert(children, child.Name .. " (" .. child.ClassName .. ")")
+                            end
+                            print("[Christmas Farm] Candy Cane children:", table.concat(children, ", "))
                         end
                     end
+                end)
+                
+                if not success then
+                    warn("[Christmas Farm] ERROR in ChildAdded callback:", err)
                 end
             end)
+            print("[Christmas Farm] ChildAdded connection set up successfully")
 
             -- Wait a moment for Candy Canes to spawn
+            print("[Christmas Farm] Waiting 1.5 seconds for Candy Canes to spawn...")
             wait(1.5)
             
             -- Also check for any Candy Canes that already spawned
+            print("[Christmas Farm] Checking workspace for already-spawned Candy Canes...")
+            local foundCount = 0
             for _, v in pairs(workspace:GetChildren()) do
-                if v and v.Name == "Candy Cane" and not existingCandyCanes[v] then
-                    if v:FindFirstChild("ItemDetector") then
-                        if not table.find(newCandyCanes, v) then
-                            table.insert(newCandyCanes, v)
+                if v and v.Name == "Candy Cane" then
+                    if existingCandyCanes[v] then
+                        print("[Christmas Farm] Found existing Candy Cane (old), ignoring")
+                    else
+                        print("[Christmas Farm] Found new Candy Cane in workspace!")
+                        local itemDetector = v:FindFirstChild("ItemDetector")
+                        if itemDetector then
+                            print("[Christmas Farm] Has ItemDetector, adding to list")
+                            if not table.find(newCandyCanes, v) then
+                                table.insert(newCandyCanes, v)
+                                foundCount = foundCount + 1
+                            end
+                        else
+                            print("[Christmas Farm] WARNING: No ItemDetector found!")
+                            local children = {}
+                            for _, child in pairs(v:GetChildren()) do
+                                table.insert(children, child.Name .. " (" .. child.ClassName .. ")")
+                            end
+                            print("[Christmas Farm] Children:", table.concat(children, ", "))
                         end
+                    end
+                end
+            end
+            print("[Christmas Farm] Found", foundCount, "new Candy Canes in workspace check")
+            print("[Christmas Farm] Total new Candy Canes to pickup:", #newCandyCanes)
+
+            if #newCandyCanes == 0 then
+                warn("[Christmas Farm] WARNING: No new Candy Canes found! Checking all Candy Canes in workspace...")
+                local allCandyCanes = {}
+                for _, v in pairs(workspace:GetDescendants()) do
+                    if v and v.Name == "Candy Cane" then
+                        table.insert(allCandyCanes, v)
+                    end
+                end
+                print("[Christmas Farm] Total Candy Canes in workspace:", #allCandyCanes)
+                for i, v in ipairs(allCandyCanes) do
+                    print("[Christmas Farm] Candy Cane", i, ":", v, "| Parent:", v.Parent and v.Parent.Name or "nil")
+                    local itemDetector = v:FindFirstChild("ItemDetector")
+                    print("[Christmas Farm]   - Has ItemDetector:", itemDetector ~= nil)
+                    if itemDetector then
+                        print("[Christmas Farm]   - ItemDetector MaxActivationDistance:", itemDetector.MaxActivationDistance)
                     end
                 end
             end
@@ -4088,55 +4178,155 @@ features.ChristmasFarm = function()
             -- Pickup loop for NEW Candy Canes
             local clickedCandyCanes = {}
             local startTime = tick()
+            print("[Christmas Farm] Starting pickup loop for", #newCandyCanes, "Candy Canes...")
+            
             while (tick() - startTime < 15) and christmasfarmactive.Value do
+                if #newCandyCanes == 0 then
+                    print("[Christmas Farm] No more Candy Canes to pickup!")
+                    break
+                end
+                
                 for i = #newCandyCanes, 1, -1 do
                     local candyCane = newCandyCanes[i]
                     
                     -- Skip if already clicked or doesn't exist
-                    if clickedCandyCanes[candyCane] or not candyCane or not candyCane:IsDescendantOf(workspace) then
+                    if clickedCandyCanes[candyCane] then
+                        print("[Christmas Farm] Candy Cane already clicked, removing from list")
+                        table.remove(newCandyCanes, i)
+                    elseif not candyCane then
+                        print("[Christmas Farm] Candy Cane is nil, removing from list")
+                        table.remove(newCandyCanes, i)
+                    elseif not candyCane:IsDescendantOf(workspace) then
+                        print("[Christmas Farm] Candy Cane no longer in workspace, removing from list")
                         table.remove(newCandyCanes, i)
                     else
                         local itemDetector = candyCane:FindFirstChild("ItemDetector")
-                        if itemDetector then
+                        if not itemDetector then
+                            warn("[Christmas Farm] WARNING: Candy Cane has no ItemDetector! Removing from list")
+                            table.remove(newCandyCanes, i)
+                        else
                             -- Teleport close to the Candy Cane (within 12 studs for ItemDetector)
-                            if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                                local candyPos = candyCane:FindFirstChildOfClass("BasePart")
-                                if candyPos then
+                            if not plr.Character then
+                                warn("[Christmas Farm] ERROR: Player character is nil!")
+                            elseif not plr.Character:FindFirstChild("HumanoidRootPart") then
+                                warn("[Christmas Farm] ERROR: HumanoidRootPart not found!")
+                            else
+                                -- Try multiple methods to get the position
+                                local candyPos = nil
+                                local candyCFrame = nil
+                                
+                                -- Method 1: Check if Candy Cane itself is a BasePart
+                                if candyCane:IsA("BasePart") then
+                                    candyPos = candyCane
+                                    candyCFrame = candyCane.CFrame
+                                    print("[Christmas Farm] Candy Cane is a BasePart")
+                                -- Method 2: Check if it's a Model with PrimaryPart
+                                elseif candyCane:IsA("Model") then
+                                    if candyCane.PrimaryPart then
+                                        candyPos = candyCane.PrimaryPart
+                                        candyCFrame = candyCane:GetPrimaryPartCFrame()
+                                        print("[Christmas Farm] Using Model PrimaryPart")
+                                    else
+                                        -- Method 3: Find first BasePart in the model
+                                        candyPos = candyCane:FindFirstChildOfClass("BasePart")
+                                        if candyPos then
+                                            candyCFrame = candyPos.CFrame
+                                            print("[Christmas Farm] Using first BasePart in Model")
+                                        end
+                                    end
+                                -- Method 4: ItemDetector's parent might be the part
+                                elseif itemDetector.Parent and itemDetector.Parent:IsA("BasePart") then
+                                    candyPos = itemDetector.Parent
+                                    candyCFrame = itemDetector.Parent.CFrame
+                                    print("[Christmas Farm] Using ItemDetector's parent BasePart")
+                                end
+                                
+                                if not candyPos or not candyCFrame then
+                                    warn("[Christmas Farm] ERROR: Could not find position for Candy Cane!")
+                                    print("[Christmas Farm] Candy Cane type:", candyCane.ClassName)
+                                    print("[Christmas Farm] Candy Cane children:")
+                                    for _, child in pairs(candyCane:GetChildren()) do
+                                        print("[Christmas Farm]   -", child.Name, "(" .. child.ClassName .. ")")
+                                    end
+                                    table.remove(newCandyCanes, i)
+                                else
                                     local distance = (plr.Character.HumanoidRootPart.Position - candyPos.Position).Magnitude
+                                    print("[Christmas Farm] Candy Cane distance:", math.floor(distance), "studs")
                                     
                                     -- If too far, teleport closer (within 10 studs to be safe)
                                     if distance > 10 then
-                                        local teleportCFrame = candyPos.CFrame * CFrame.new(0, 0, -8)
+                                        print("[Christmas Farm] Too far! Teleporting closer...")
+                                        local teleportCFrame = candyCFrame * CFrame.new(0, 0, -8)
                                         plr.Character.HumanoidRootPart.CFrame = teleportCFrame
                                         task.wait(0.2)
+                                        -- Recalculate distance
+                                        distance = (plr.Character.HumanoidRootPart.Position - candyPos.Position).Magnitude
+                                        print("[Christmas Farm] New distance after teleport:", math.floor(distance), "studs")
                                     end
                                     
-                                    -- Click the ItemDetector
-                                    fireclickdetector(itemDetector)
-                                    clickedCandyCanes[candyCane] = true
-                                    table.remove(newCandyCanes, i)
-                                    task.wait(0.1)
+                                    if distance <= 12 then
+                                        print("[Christmas Farm] Within range! Clicking ItemDetector...")
+                                        local success, err = pcall(function()
+                                            fireclickdetector(itemDetector)
+                                        end)
+                                        
+                                        if success then
+                                            print("[Christmas Farm] Successfully clicked ItemDetector!")
+                                            clickedCandyCanes[candyCane] = true
+                                            table.remove(newCandyCanes, i)
+                                        else
+                                            warn("[Christmas Farm] ERROR clicking ItemDetector:", err)
+                                        end
+                                        task.wait(0.1)
+                                    else
+                                        print("[Christmas Farm] Still too far after teleport:", math.floor(distance), "studs (max 12)")
+                                    end
                                 end
                             end
-                        else
-                            -- No ItemDetector, remove from list
-                            table.remove(newCandyCanes, i)
                         end
                     end
                 end
                 
                 -- If all new Candy Canes are clicked, we're done
                 if #newCandyCanes == 0 then
+                    print("[Christmas Farm] All Candy Canes picked up!")
                     break
                 end
                 
                 task.wait(0.1)
             end
             
+            print("[Christmas Farm] Pickup loop finished. Remaining Candy Canes:", #newCandyCanes)
+            
             -- Disconnect the connection after pickup is done
             if candypickupconnection then
+                print("[Christmas Farm] Disconnecting ChildAdded connection")
                 candypickupconnection:Disconnect()
                 candypickupconnection = nil
+            end
+
+            -- Check if all candies are picked up and serverhop if enabled and not in combat
+            if #newCandyCanes == 0 and serverhopnoboss then
+                print("[Christmas Farm] All candies picked up! Checking combat status...")
+                
+                -- Check if player is in combat
+                local inCombat = false
+                if RS.Settings:FindFirstChild(user) and RS.Settings[user]:FindFirstChild("CombatCount") then
+                    if RS.Settings[user].CombatCount.Value > 3 then
+                        inCombat = true
+                        print("[Christmas Farm] Player is in combat (CombatCount:", RS.Settings[user].CombatCount.Value, "), skipping serverhop")
+                    else
+                        print("[Christmas Farm] Player is NOT in combat (CombatCount:", RS.Settings[user].CombatCount.Value, ")")
+                    end
+                else
+                    print("[Christmas Farm] CombatCount not found, assuming not in combat")
+                end
+                
+                if not inCombat then
+                    print("[Christmas Farm] Serverhopping immediately after candy pickup...")
+                    features.TeleportRandomServer()
+                    return
+                end
             end
 
             features.gotosafespot()
