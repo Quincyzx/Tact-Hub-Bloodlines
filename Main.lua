@@ -144,10 +144,21 @@ local authResult = Authenticate()
 if not authResult and _G.AuthData then
     -- Will show UI prompt after Rayfield loads
     print("[Auth] Waiting for key input via UI...")
+    -- Set flag that authentication is required
+    _G.AuthRequired = true
+    _G.AuthComplete = false  -- Explicitly set to false
 elseif not authResult and not _G.AuthData then
     warn("[Auth] Authentication system failed to initialize")
     plr:Kick("Authentication system failed. Please try again.")
     return
+elseif authResult then
+    -- Already authenticated, continue
+    _G.AuthRequired = false
+    _G.AuthComplete = true
+else
+    -- Default: not authenticated
+    _G.AuthRequired = true
+    _G.AuthComplete = false
 end
 
 local queue_on_teleport = queue_on_teleport or syn.queue_on_teleport or fluxus.queue_on_teleport or function(...) return ... end
@@ -222,7 +233,8 @@ local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/Quin
 local Map = loadstring(game:HttpGet('https://pastebin.com/raw/HspCejNb'))()
 
 -- Check if authentication is needed and show prompt
-if _G.AuthData and not _G.AuthData.Authenticated then
+-- This MUST block until authentication is complete
+if _G.AuthRequired and _G.AuthData and not _G.AuthData.Authenticated then
     -- Show authentication prompt before creating main window
     local AuthWindow = Rayfield:CreateWindow({
         Name = "Tact Hub - Authentication Required",
@@ -334,15 +346,33 @@ if _G.AuthData and not _G.AuthData.Authenticated then
         end,
     })
     
-    -- Wait for authentication to complete
+    -- Wait for authentication to complete - THIS MUST BLOCK
+    local authTimeout = tick() + 300 -- 5 minute timeout
     repeat
         task.wait(0.1)
-    until _G.AuthData.Authenticated or not _G.AuthData
+        if tick() > authTimeout then
+            warn("[Auth] Authentication timeout")
+            plr:Kick("Authentication timeout. Please restart and enter a valid key.")
+            return
+        end
+    until (_G.AuthData and _G.AuthData.Authenticated) or not _G.AuthData
     
     if not _G.AuthData or not _G.AuthData.Authenticated then
+        warn("[Auth] Authentication was not completed")
         plr:Kick("Authentication required. Please restart and enter a valid key.")
         return
     end
+    
+    -- Authentication successful, set flag
+    _G.AuthComplete = true
+    _G.AuthRequired = false
+end
+
+-- CRITICAL: Block script execution if authentication is not complete
+if _G.AuthRequired and not _G.AuthComplete then
+    warn("[Auth] Script blocked - authentication not complete")
+    plr:Kick("Authentication required. Please restart and enter a valid key.")
+    return
 end
 
 --[[
@@ -8238,6 +8268,13 @@ __________                 _____.__       .__       .___   ________             
         \/      \/\/                    \/           \/          \/     \/     \/        
 
 --]]
+
+-- FINAL AUTH CHECK: Block main window creation if not authenticated
+if not _G.AuthComplete then
+    warn("[Auth] CRITICAL: Authentication not complete, blocking main window")
+    plr:Kick("Authentication required. Please restart and enter a valid key.")
+    return
+end
 
 local Window = Rayfield:CreateWindow({
     Name = "Tact Bloodlines",
