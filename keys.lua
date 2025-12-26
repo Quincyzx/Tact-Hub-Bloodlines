@@ -2,7 +2,7 @@
 -- Format: tact-XXXX-XXXX-XXXX
 
 return {
-    "tact-A7F3-K9Q2-8MZ4",
+    "tact-A7F3-K9Q2-8MZ4", -- tact
     "tact-4R8T-XP9L-Q2A7",
     "tact-ZK7M-29FQ-8RLA",
     "tact-9A2X-MQ7F-K8RL",
