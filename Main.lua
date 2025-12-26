@@ -4347,8 +4347,12 @@ features.ChristmasFarm = function()
         local lookingforbosscounter = 0
         local lastActivityTime = tick() -- Track last time something meaningful happened
         _G.lastActivityTime = lastActivityTime -- Make it accessible from finishboss
-        local timeoutDuration = 45 -- Serverhop after 45 seconds of no activity
+        local timeoutDuration = 30 -- Serverhop after 30 seconds of no activity (reduced from 45)
         local lastPosition = nil
+        local stuckCheckTime = tick()
+        local lastMovementTime = tick()
+        local teleportFailureCount = 0
+        local lastTeleportAttempt = nil
         
         while christmasfarmactive.Value do
             wait()
@@ -4356,24 +4360,137 @@ features.ChristmasFarm = function()
             -- Check if player is stuck/glitched (not moving and no activity)
             if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
                 local currentPos = plr.Character.HumanoidRootPart.Position
+                local hrp = plr.Character.HumanoidRootPart
                 
-                -- Check if we're in void (very low Y position or NaN)
-                if currentPos.Y < -500 or currentPos.Y ~= currentPos.Y then
-                    warn("[Christmas Farm] DETECTED VOID/GLITCH! Y position:", currentPos.Y, "- Serverhopping immediately...")
+                -- Check if character is actually in workspace (not in limbo/void)
+                if plr.Character.Parent ~= workspace then
+                    warn("[Christmas Farm] ========== CHARACTER NOT IN WORKSPACE (VOID/LIMBO) ==========")
+                    warn("[Christmas Farm] Character parent:", plr.Character.Parent)
+                    warn("[Christmas Farm] Serverhopping immediately...")
                     features.TeleportRandomServer()
                     return
                 end
                 
-                -- Check if position changed (player is moving)
+                -- Check if character is visible/rendering
+                local head = plr.Character:FindFirstChild("Head")
+                local isCharacterVisible = false
+                if head then
+                    -- Check if head exists and character is in workspace
+                    if plr.Character.Parent == workspace and head.Parent == plr.Character then
+                        isCharacterVisible = true
+                    end
+                end
+                
+                -- Aggressive void/glitch detection
+                local isVoid = false
+                local voidReason = ""
+                
+                -- Check 1: Very low Y position
+                if currentPos.Y < -500 then
+                    isVoid = true
+                    voidReason = "Y position too low: " .. currentPos.Y
+                end
+                
+                -- Check 2: NaN or invalid position
+                if currentPos.Y ~= currentPos.Y or currentPos.X ~= currentPos.X or currentPos.Z ~= currentPos.Z then
+                    isVoid = true
+                    voidReason = "Invalid position (NaN)"
+                end
+                
+                -- Check 3: Position is extremely high (might be glitched)
+                if currentPos.Y > 10000 then
+                    isVoid = true
+                    voidReason = "Y position too high: " .. currentPos.Y
+                end
+                
+                -- Check 4: Check if velocity is zero and position hasn't changed (stuck)
                 if lastPosition then
                     local positionChange = (currentPos - lastPosition).Magnitude
                     if positionChange > 1 then
-                        -- Player moved, reset activity timer
+                        -- Player moved, reset timers
                         lastActivityTime = tick()
                         _G.lastActivityTime = lastActivityTime
+                        lastMovementTime = tick()
+                        teleportFailureCount = 0 -- Reset teleport failure count on movement
+                    else
+                        -- Player not moving, check how long
+                        local timeSinceMovement = tick() - lastMovementTime
+                        if timeSinceMovement > 8 then
+                            -- Not moved for 8 seconds, might be stuck
+                            isVoid = true
+                            voidReason = "Stuck (no movement for " .. math.floor(timeSinceMovement) .. " seconds)"
+                        end
+                        
+                        -- Check if teleport is failing (position not changing after teleport attempts)
+                        if lastTeleportAttempt then
+                            local timeSinceTeleport = tick() - lastTeleportAttempt
+                            if timeSinceTeleport > 2 and positionChange < 0.1 then
+                                teleportFailureCount = teleportFailureCount + 1
+                                if teleportFailureCount >= 3 then
+                                    isVoid = true
+                                    voidReason = "Teleport failing (position unchanged after " .. teleportFailureCount .. " attempts)"
+                                end
+                            end
+                        end
                     end
                 end
                 lastPosition = currentPos
+                
+                -- Check 7: Character not visible/rendering (in void/limbo)
+                if not isCharacterVisible then
+                    local timeSinceMovement = lastMovementTime and (tick() - lastMovementTime) or 0
+                    if timeSinceMovement > 5 then
+                        isVoid = true
+                        voidReason = "Character not visible/rendering (in void/limbo for " .. math.floor(timeSinceMovement) .. " seconds)"
+                    end
+                end
+                
+                -- Track teleport attempts for failure detection
+                -- This will be set when Teleport() is called in checkbossstatus
+                if lastPosition and (currentPos - lastPosition).Magnitude < 0.1 then
+                    -- Position didn't change, might be a failed teleport
+                    if not lastTeleportAttempt then
+                        lastTeleportAttempt = tick()
+                    end
+                else
+                    -- Position changed, reset teleport attempt tracking
+                    lastTeleportAttempt = nil
+                end
+                
+                -- Check 5: Check if character is frozen (Humanoid state)
+                local humanoid = plr.Character:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    if humanoid.RootPart and humanoid.RootPart.Anchored == true then
+                        isVoid = true
+                        voidReason = "Character is anchored/frozen"
+                    end
+                    -- Check if humanoid is in a weird state
+                    if humanoid.Health <= 0 and humanoid.Health ~= 0 then
+                        isVoid = true
+                        voidReason = "Humanoid in invalid state"
+                    end
+                end
+                
+                -- Check 6: Check if HRP is anchored (frozen)
+                if hrp.Anchored == true then
+                    isVoid = true
+                    voidReason = "HumanoidRootPart is anchored"
+                end
+                
+                -- Immediate serverhop if void detected
+                if isVoid then
+                    warn("[Christmas Farm] ========== VOID/GLITCH DETECTED! ==========")
+                    warn("[Christmas Farm] Reason:", voidReason)
+                    warn("[Christmas Farm] Position:", currentPos)
+                    warn("[Christmas Farm] Serverhopping immediately...")
+                    features.TeleportRandomServer()
+                    return
+                end
+                
+                -- Initialize lastMovementTime if not set
+                if not lastMovementTime then
+                    lastMovementTime = tick()
+                end
                 
                 -- Check for boss
                 local bossthere, bosshrp, bossname = checkbossstatus()
@@ -4395,10 +4512,25 @@ features.ChristmasFarm = function()
                 -- Check timeout - if no activity for too long, serverhop
                 local timeSinceActivity = tick() - lastActivityTime
                 if timeSinceActivity > timeoutDuration then
-                    warn("[Christmas Farm] TIMEOUT: No activity for", math.floor(timeSinceActivity), "seconds!")
+                    warn("[Christmas Farm] ========== ACTIVITY TIMEOUT ==========")
+                    warn("[Christmas Farm] No activity for", math.floor(timeSinceActivity), "seconds!")
                     warn("[Christmas Farm] Player may be stuck/glitched. Serverhopping...")
                     features.TeleportRandomServer()
                     return
+                end
+                
+                -- Additional stuck check: If no movement for 10 seconds, serverhop immediately
+                -- This runs independently of activity timer to catch frozen states
+                if lastMovementTime then
+                    local timeSinceMovement = tick() - lastMovementTime
+                    if timeSinceMovement > 10 then
+                        warn("[Christmas Farm] ========== STUCK/FROZEN DETECTED ==========")
+                        warn("[Christmas Farm] No movement detected for", math.floor(timeSinceMovement), "seconds!")
+                        warn("[Christmas Farm] Current position:", currentPos)
+                        warn("[Christmas Farm] Serverhopping immediately...")
+                        features.TeleportRandomServer()
+                        return
+                    end
                 end
             else
                 -- No character, might be stuck loading
