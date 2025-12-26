@@ -8,9 +8,147 @@
        \/       \/              \/             \/                 \/\/         \/            \/      \/ 
 
 --]]
-local plr
 
-local plr = game:GetService("Players").LocalPlayer
+-- Authentication System
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local plr = Players.LocalPlayer
+
+-- Get HWID
+local function GetHWID()
+    local success, hwid = pcall(function()
+        return game:GetService("RbxAnalyticsService"):GetClientId()
+    end)
+    if success and hwid then
+        return hwid
+    end
+    -- Fallback HWID generation
+    return HttpService:GenerateGUID(false)
+end
+
+local HWID = GetHWID()
+
+-- Function to validate and link key
+local function ValidateAndLinkKey(keyInput, hwid, keysList, hwidMappings)
+    keyInput = keyInput:gsub("%s+", "") -- Remove whitespace
+    
+    -- Validate key format
+    if not keyInput:match("^tact%-[A-Z0-9]+%-[A-Z0-9]+%-[A-Z0-9]+$") then
+        return false, "Invalid key format. Key must be in format: tact-XXXX-XXXX-XXXX"
+    end
+    
+    -- Check if key exists in keys list
+    local keyValid = false
+    for _, key in ipairs(keysList) do
+        if key == keyInput then
+            keyValid = true
+            break
+        end
+    end
+    
+    if not keyValid then
+        return false, "Invalid key! This key is not in the authorized list."
+    end
+    
+    -- Check if key is already used by another HWID
+    for existingHWID, existingKey in pairs(hwidMappings) do
+        if existingKey == keyInput and existingHWID ~= hwid then
+            return false, "This key is already linked to another device."
+        end
+    end
+    
+    -- Link HWID to key
+    hwidMappings[hwid] = keyInput
+    
+    print("[Auth] Successfully authenticated! Key:", keyInput)
+    print("[Auth] Note: HWID mapping will be saved to GitHub manually by admin")
+    return true, "Authentication successful!"
+end
+
+-- Authentication function
+local function Authenticate()
+    -- Load keys from GitHub
+    local keysSuccess, keysList = pcall(function()
+        local keysUrl = "https://raw.githubusercontent.com/Quincyzx/Tact-Hub-Bloodlines/main/keys.lua"
+        local keysCode = game:HttpGet(keysUrl)
+        return loadstring(keysCode)()
+    end)
+    
+    if not keysSuccess or not keysList then
+        warn("[Auth] Failed to load keys from GitHub")
+        return false
+    end
+    
+    -- Load HWID mappings from GitHub
+    local mappingsSuccess, hwidMappings = pcall(function()
+        local mappingsUrl = "https://raw.githubusercontent.com/Quincyzx/Tact-Hub-Bloodlines/main/hwid_mappings.lua"
+        local mappingsCode = game:HttpGet(mappingsUrl)
+        if mappingsCode and mappingsCode ~= "404: Not Found" and not mappingsCode:find("404") then
+            return loadstring(mappingsCode)()
+        end
+        return {} -- Return empty table if file doesn't exist yet
+    end)
+    
+    if not mappingsSuccess then
+        hwidMappings = {}
+    end
+    
+    -- Check if HWID is already linked
+    if hwidMappings[HWID] then
+        local linkedKey = hwidMappings[HWID]
+        -- Verify the key still exists in keys list
+        for _, key in ipairs(keysList) do
+            if key == linkedKey then
+                print("[Auth] HWID already authenticated with key:", linkedKey)
+                return true
+            end
+        end
+        -- Key was removed, need to re-authenticate
+        warn("[Auth] Previously linked key no longer valid")
+    end
+    
+    -- Store authentication data globally for UI prompt
+    _G.AuthData = {
+        HWID = HWID,
+        KeysList = keysList,
+        HWIDMappings = hwidMappings,
+        Authenticated = false,
+        ValidateAndLinkKey = ValidateAndLinkKey
+    }
+    
+    -- Try rconsole first if available
+    if rconsole then
+        rconsoleprint("@@CYAN@@")
+        rconsoleprint("\n[Auth] Please enter your key:\n")
+        rconsoleprint("@@WHITE@@")
+        local keyInput = rconsoleinput()
+        if keyInput and keyInput ~= "" then
+            local success, message = ValidateAndLinkKey(keyInput, HWID, keysList, hwidMappings)
+            if success then
+                _G.AuthData.Authenticated = true
+                return true
+            else
+                warn("[Auth]", message)
+                plr:Kick("Authentication failed: " .. (message or "Invalid key"))
+                return false
+            end
+        end
+    end
+    
+    -- Need to wait for UI to load
+    return false
+end
+
+-- Run initial authentication check
+local authResult = Authenticate()
+if not authResult and _G.AuthData then
+    -- Will show UI prompt after Rayfield loads
+    print("[Auth] Waiting for key input via UI...")
+elseif not authResult and not _G.AuthData then
+    warn("[Auth] Authentication system failed to initialize")
+    plr:Kick("Authentication system failed. Please try again.")
+    return
+end
 
 local queue_on_teleport = queue_on_teleport or syn.queue_on_teleport or fluxus.queue_on_teleport or function(...) return ... end
 
@@ -82,6 +220,130 @@ __________             .___.__                  __       .__                    
 -- Load modified Rayfield from GitHub
 local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/Quincyzx/Tact-Hub-Bloodlines/main/lib.lua'))()
 local Map = loadstring(game:HttpGet('https://pastebin.com/raw/HspCejNb'))()
+
+-- Check if authentication is needed and show prompt
+if _G.AuthData and not _G.AuthData.Authenticated then
+    -- Show authentication prompt before creating main window
+    local AuthWindow = Rayfield:CreateWindow({
+        Name = "Tact Hub - Authentication Required",
+        Icon = 0,
+        LoadingTitle = "Authentication",
+        LoadingSubtitle = "Please enter your key",
+        Theme = {
+            TextColor = Color3.fromRGB(255, 255, 255),
+            Background = Color3.fromRGB(15, 15, 25),
+            Topbar = Color3.fromRGB(30, 20, 45),
+            Shadow = Color3.fromRGB(0, 0, 0),
+            NotificationBackground = Color3.fromRGB(30, 20, 45),
+            NotificationActionsBackground = Color3.fromRGB(40, 30, 55),
+            TabBackground = Color3.fromRGB(25, 15, 35),
+            TabStroke = Color3.fromRGB(60, 40, 80),
+            TabBackgroundSelected = Color3.fromRGB(100, 60, 150),
+            TabTextColor = Color3.fromRGB(200, 180, 220),
+            SelectedTabTextColor = Color3.fromRGB(255, 255, 255),
+            ElementBackground = Color3.fromRGB(20, 12, 30),
+            ElementBackgroundHover = Color3.fromRGB(35, 25, 50),
+            SecondaryElementBackground = Color3.fromRGB(25, 18, 35),
+            ElementStroke = Color3.fromRGB(60, 40, 80),
+            SecondaryElementStroke = Color3.fromRGB(70, 50, 90),
+            SliderBackground = Color3.fromRGB(40, 30, 55),
+            SliderProgress = Color3.fromRGB(120, 70, 180),
+            SliderStroke = Color3.fromRGB(80, 50, 120),
+            ToggleBackground = Color3.fromRGB(25, 15, 35),
+            ToggleEnabled = Color3.fromRGB(100, 60, 150),
+            ToggleDisabled = Color3.fromRGB(40, 30, 50),
+            ToggleEnabledStroke = Color3.fromRGB(120, 80, 170),
+            ToggleDisabledStroke = Color3.fromRGB(50, 40, 60),
+            ToggleEnabledOuterStroke = Color3.fromRGB(140, 100, 190),
+            ToggleDisabledOuterStroke = Color3.fromRGB(30, 25, 40),
+            DropdownSelected = Color3.fromRGB(100, 60, 150),
+            DropdownUnselected = Color3.fromRGB(25, 15, 35),
+            InputBackground = Color3.fromRGB(20, 12, 30),
+            InputStroke = Color3.fromRGB(60, 40, 80),
+            PlaceholderColor = Color3.fromRGB(150, 130, 170)
+        },
+        DisableRayfieldPrompts = true,
+        DisableBuildWarnings = true,
+        KeySystem = false
+    })
+    
+    local AuthTab = AuthWindow:CreateTab("Authentication", "lock")
+    
+    AuthTab:CreateParagraph({
+        Title = "Authentication Required",
+        Content = "This is your first time running Tact Hub on this device.\nPlease enter your key to continue.\n\nHWID: " .. _G.AuthData.HWID
+    })
+    
+    local keyInputValue = ""
+    local keyInput = AuthTab:CreateInput({
+        Name = "Enter Key",
+        CurrentValue = "",
+        PlaceholderText = "tact-XXXX-XXXX-XXXX",
+        RemoveTextAfterFocusLost = false,
+        Flag = "AuthKeyInput",
+        Callback = function(Text)
+            keyInputValue = Text
+        end,
+    })
+    
+    local authButton = AuthTab:CreateButton({
+        Name = "Authenticate",
+        Callback = function()
+            -- Get the current value from the input
+            local key = keyInputValue
+            -- Also try to get it from Rayfield's flag system as fallback
+            if not key or key == "" then
+                local flagValue = Rayfield.Flags["AuthKeyInput"]
+                if flagValue then
+                    key = flagValue.CurrentValue or ""
+                end
+            end
+            if not key or key == "" then
+                Rayfield:Notify({
+                    Title = "Authentication",
+                    Content = "Please enter a key",
+                    Duration = 3,
+                    Image = 0
+                })
+                return
+            end
+            
+            local success, message = _G.AuthData.ValidateAndLinkKey(key, _G.AuthData.HWID, _G.AuthData.KeysList, _G.AuthData.HWIDMappings)
+            
+            if success then
+                _G.AuthData.Authenticated = true
+                Rayfield:Notify({
+                    Title = "Authentication",
+                    Content = "Successfully authenticated! Loading script...",
+                    Duration = 3,
+                    Image = 0
+                })
+                
+                -- Close auth window and continue with main script
+                task.wait(1)
+                AuthWindow:Destroy()
+                _G.AuthComplete = true
+            else
+                Rayfield:Notify({
+                    Title = "Authentication Failed",
+                    Content = message or "Invalid key",
+                    Duration = 5,
+                    Image = 0
+                })
+            end
+        end,
+    })
+    
+    -- Wait for authentication to complete
+    repeat
+        task.wait(0.1)
+    until _G.AuthData.Authenticated or not _G.AuthData
+    
+    if not _G.AuthData or not _G.AuthData.Authenticated then
+        plr:Kick("Authentication required. Please restart and enter a valid key.")
+        return
+    end
+end
 
 --[[
 
