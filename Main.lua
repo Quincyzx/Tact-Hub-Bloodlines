@@ -4444,10 +4444,18 @@ features.ChristmasFarm = function()
 
         -- Main farm loop
         local lookingforbosscounter = 0
+        local playerDetectionActive = true
         
-        while christmasfarmactive.Value do
-            wait()
-            if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+        -- Continuous player detection in separate thread
+        spawn(function()
+            while christmasfarmactive.Value and playerDetectionActive do
+                task.wait(0.5) -- Check every 0.5 seconds
+                
+                if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then
+                    -- Skip if character not loaded
+                    continue
+                end
+                
                 local hrp = plr.Character.HumanoidRootPart
                 local playerPos = hrp.Position
                 
@@ -4458,20 +4466,16 @@ features.ChristmasFarm = function()
                 
                 local success, err = pcall(function()
                     local allPlayers = Players:GetPlayers()
-                    print("[Christmas Farm] Checking for nearby players. Total players in server:", #allPlayers)
                     
                     for _, otherPlayer in pairs(allPlayers) do
                         if otherPlayer ~= plr then
-                            print("[Christmas Farm] Checking player:", otherPlayer.Name)
-                            
                             if not otherPlayer.Character then
-                                print("[Christmas Farm]   - Player has no character")
+                                continue
                             elseif not otherPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                                print("[Christmas Farm]   - Player character has no HumanoidRootPart")
+                                continue
                             else
                                 local otherHrp = otherPlayer.Character.HumanoidRootPart
                                 local distance = (playerPos - otherHrp.Position).Magnitude
-                                print("[Christmas Farm]   - Player distance:", math.floor(distance), "studs")
                                 
                                 if distance <= 100 then
                                     nearbyPlayer = true
@@ -4492,6 +4496,8 @@ features.ChristmasFarm = function()
                 
                 -- If nearby player detected, teleport to safe spot immediately
                 if nearbyPlayer then
+                    playerDetectionActive = false -- Stop detection to prevent multiple triggers
+                    
                     print("[Christmas Farm] ========== PLAYER DETECTED ==========")
                     print("[Christmas Farm] Player Name:", nearbyPlayerName)
                     print("[Christmas Farm] Distance:", math.floor(nearbyPlayerDistance), "studs")
@@ -4512,18 +4518,16 @@ features.ChristmasFarm = function()
                     local waitStartTime = tick()
                     local maxWaitTime = 30 -- Maximum 30 seconds wait
                     
-                    while tick() - waitStartTime < maxWaitTime do
+                    while tick() - waitStartTime < maxWaitTime and christmasfarmactive.Value do
                         local outOfCombat = false
                         local combatCheckSuccess, combatCheckErr = pcall(function()
                             if RS.Settings:FindFirstChild(user) and RS.Settings[user]:FindFirstChild("CombatCount") then
                                 local combatCount = RS.Settings[user].CombatCount.Value
-                                print("[Christmas Farm] CombatCount:", combatCount)
                                 if combatCount <= 3 then
                                     outOfCombat = true
                                 end
                             else
                                 -- If CombatCount doesn't exist, assume out of combat
-                                print("[Christmas Farm] CombatCount not found, assuming out of combat")
                                 outOfCombat = true
                             end
                         end)
@@ -4566,6 +4570,12 @@ features.ChristmasFarm = function()
                     
                     return
                 end
+            end
+        end)
+        
+        while christmasfarmactive.Value do
+            wait()
+            if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
                 
                 local bossthere, bosshrp, bossname = checkbossstatus()
                 if bossthere and bosshrp then
