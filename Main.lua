@@ -4062,6 +4062,12 @@ features.ChristmasFarm = function()
             if bosshrp and bosshrp.Parent then
                 print("[Christmas Farm] Boss Name:", bosshrp.Parent.Name)
             end
+            
+            -- Reset activity timer when boss dies
+            if _G.lastActivityTime then
+                _G.lastActivityTime = tick()
+                print("[Christmas Farm] Boss died! Resetting activity timer")
+            end
 
             if christmasfarmactive.Value == false then 
                 print("[Christmas Farm] Farm disabled, skipping Candy Cane pickup")
@@ -4274,6 +4280,11 @@ features.ChristmasFarm = function()
                                             print("[Christmas Farm] Successfully clicked ItemDetector!")
                                             clickedCandyCanes[candyCane] = true
                                             table.remove(newCandyCanes, i)
+                                            -- Reset activity timer when candy is picked up
+                                            if _G.lastActivityTime then
+                                                _G.lastActivityTime = tick()
+                                                print("[Christmas Farm] Candy picked up! Resetting activity timer")
+                                            end
                                         else
                                             warn("[Christmas Farm] ERROR clicking ItemDetector:", err)
                                         end
@@ -4332,21 +4343,70 @@ features.ChristmasFarm = function()
             features.gotosafespot()
         end
 
-        -- Main farm loop
+        -- Main farm loop with activity timeout
         local lookingforbosscounter = 0
+        local lastActivityTime = tick() -- Track last time something meaningful happened
+        _G.lastActivityTime = lastActivityTime -- Make it accessible from finishboss
+        local timeoutDuration = 45 -- Serverhop after 45 seconds of no activity
+        local lastPosition = nil
+        
         while christmasfarmactive.Value do
             wait()
+            
+            -- Check if player is stuck/glitched (not moving and no activity)
             if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                local currentPos = plr.Character.HumanoidRootPart.Position
+                
+                -- Check if we're in void (very low Y position or NaN)
+                if currentPos.Y < -500 or currentPos.Y ~= currentPos.Y then
+                    warn("[Christmas Farm] DETECTED VOID/GLITCH! Y position:", currentPos.Y, "- Serverhopping immediately...")
+                    features.TeleportRandomServer()
+                    return
+                end
+                
+                -- Check if position changed (player is moving)
+                if lastPosition then
+                    local positionChange = (currentPos - lastPosition).Magnitude
+                    if positionChange > 1 then
+                        -- Player moved, reset activity timer
+                        lastActivityTime = tick()
+                        _G.lastActivityTime = lastActivityTime
+                    end
+                end
+                lastPosition = currentPos
+                
+                -- Check for boss
                 local bossthere, bosshrp, bossname = checkbossstatus()
                 if bossthere and bosshrp then
                     lookingforbosscounter = 0
+                    lastActivityTime = tick() -- Reset activity timer when boss found
+                    _G.lastActivityTime = lastActivityTime
+                    print("[Christmas Farm] Boss found! Resetting activity timer")
                     finishboss(bosshrp)
                 elseif serverhopnoboss == true then
                     lookingforbosscounter = lookingforbosscounter + 1
                     if lookingforbosscounter > 10 then
+                        print("[Christmas Farm] No boss found after 10 attempts, serverhopping...")
                         features.TeleportRandomServer()
                         return
                     end
+                end
+                
+                -- Check timeout - if no activity for too long, serverhop
+                local timeSinceActivity = tick() - lastActivityTime
+                if timeSinceActivity > timeoutDuration then
+                    warn("[Christmas Farm] TIMEOUT: No activity for", math.floor(timeSinceActivity), "seconds!")
+                    warn("[Christmas Farm] Player may be stuck/glitched. Serverhopping...")
+                    features.TeleportRandomServer()
+                    return
+                end
+            else
+                -- No character, might be stuck loading
+                local timeSinceActivity = tick() - lastActivityTime
+                if timeSinceActivity > timeoutDuration then
+                    warn("[Christmas Farm] TIMEOUT: No character for", math.floor(timeSinceActivity), "seconds! Serverhopping...")
+                    features.TeleportRandomServer()
+                    return
                 end
             end
         end
