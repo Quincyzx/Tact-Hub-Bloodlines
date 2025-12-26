@@ -8221,7 +8221,7 @@ local Window = Rayfield:CreateWindow({
    ConfigurationSaving = {
       Enabled = true,
       FolderName = "TactHub",
-      FileName = "Configs"
+      FileName = "Configs_" .. plr.Name
    },
 
    Discord = {
