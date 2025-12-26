@@ -4453,22 +4453,59 @@ features.ChristmasFarm = function()
                 
                 -- Check for nearby players (within 100 studs)
                 local nearbyPlayer = false
-                for _, otherPlayer in pairs(Players:GetPlayers()) do
-                    if otherPlayer ~= plr and otherPlayer.Character and otherPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                        local otherHrp = otherPlayer.Character.HumanoidRootPart
-                        local distance = (playerPos - otherHrp.Position).Magnitude
-                        if distance <= 100 then
-                            nearbyPlayer = true
-                            print("[Christmas Farm] Player detected within 100 studs:", otherPlayer.Name, "Distance:", math.floor(distance))
-                            break
+                local nearbyPlayerName = nil
+                local nearbyPlayerDistance = nil
+                
+                local success, err = pcall(function()
+                    local allPlayers = Players:GetPlayers()
+                    print("[Christmas Farm] Checking for nearby players. Total players in server:", #allPlayers)
+                    
+                    for _, otherPlayer in pairs(allPlayers) do
+                        if otherPlayer ~= plr then
+                            print("[Christmas Farm] Checking player:", otherPlayer.Name)
+                            
+                            if not otherPlayer.Character then
+                                print("[Christmas Farm]   - Player has no character")
+                            elseif not otherPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                                print("[Christmas Farm]   - Player character has no HumanoidRootPart")
+                            else
+                                local otherHrp = otherPlayer.Character.HumanoidRootPart
+                                local distance = (playerPos - otherHrp.Position).Magnitude
+                                print("[Christmas Farm]   - Player distance:", math.floor(distance), "studs")
+                                
+                                if distance <= 100 then
+                                    nearbyPlayer = true
+                                    nearbyPlayerName = otherPlayer.Name
+                                    nearbyPlayerDistance = distance
+                                    print("[Christmas Farm] *** PLAYER DETECTED WITHIN 100 STUDS ***")
+                                    print("[Christmas Farm] Player:", otherPlayer.Name, "Distance:", math.floor(distance), "studs")
+                                    break
+                                end
+                            end
                         end
                     end
+                end)
+                
+                if not success then
+                    warn("[Christmas Farm] ERROR checking for nearby players:", err)
                 end
                 
                 -- If nearby player detected, teleport to safe spot immediately
                 if nearbyPlayer then
-                    print("[Christmas Farm] Player nearby! Teleporting to safe spot...")
-                    features.gotosafespot()
+                    print("[Christmas Farm] ========== PLAYER DETECTED ==========")
+                    print("[Christmas Farm] Player Name:", nearbyPlayerName)
+                    print("[Christmas Farm] Distance:", math.floor(nearbyPlayerDistance), "studs")
+                    print("[Christmas Farm] Teleporting to safe spot...")
+                    
+                    local teleportSuccess, teleportErr = pcall(function()
+                        features.gotosafespot()
+                    end)
+                    
+                    if not teleportSuccess then
+                        warn("[Christmas Farm] ERROR teleporting to safe spot:", teleportErr)
+                    else
+                        print("[Christmas Farm] Successfully teleported to safe spot")
+                    end
                     
                     -- Wait until out of combat before server hopping
                     print("[Christmas Farm] Waiting to be out of combat before serverhopping...")
@@ -4477,19 +4514,40 @@ features.ChristmasFarm = function()
                     
                     while tick() - waitStartTime < maxWaitTime do
                         local outOfCombat = false
-                        if RS.Settings:FindFirstChild(user) and RS.Settings[user]:FindFirstChild("CombatCount") then
-                            if RS.Settings[user].CombatCount.Value <= 3 then
+                        local combatCheckSuccess, combatCheckErr = pcall(function()
+                            if RS.Settings:FindFirstChild(user) and RS.Settings[user]:FindFirstChild("CombatCount") then
+                                local combatCount = RS.Settings[user].CombatCount.Value
+                                print("[Christmas Farm] CombatCount:", combatCount)
+                                if combatCount <= 3 then
+                                    outOfCombat = true
+                                end
+                            else
+                                -- If CombatCount doesn't exist, assume out of combat
+                                print("[Christmas Farm] CombatCount not found, assuming out of combat")
                                 outOfCombat = true
                             end
-                        else
-                            -- If CombatCount doesn't exist, assume out of combat
+                        end)
+                        
+                        if not combatCheckSuccess then
+                            warn("[Christmas Farm] ERROR checking combat status:", combatCheckErr)
+                            -- Assume out of combat on error
                             outOfCombat = true
                         end
                         
                         if outOfCombat then
                             print("[Christmas Farm] Out of combat! Serverhopping...")
                             task.wait(0.5)
-                            features.TeleportRandomServer()
+                            
+                            local hopSuccess, hopErr = pcall(function()
+                                features.TeleportRandomServer()
+                            end)
+                            
+                            if not hopSuccess then
+                                warn("[Christmas Farm] ERROR serverhopping:", hopErr)
+                            else
+                                print("[Christmas Farm] Serverhopping...")
+                            end
+                            
                             return
                         end
                         
@@ -4498,7 +4556,14 @@ features.ChristmasFarm = function()
                     
                     -- If we've waited too long, server hop anyway
                     warn("[Christmas Farm] Waited too long for combat to end, serverhopping anyway...")
-                    features.TeleportRandomServer()
+                    local hopSuccess, hopErr = pcall(function()
+                        features.TeleportRandomServer()
+                    end)
+                    
+                    if not hopSuccess then
+                        warn("[Christmas Farm] ERROR serverhopping after timeout:", hopErr)
+                    end
+                    
                     return
                 end
                 
