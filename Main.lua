@@ -4448,6 +4448,60 @@ features.ChristmasFarm = function()
         while christmasfarmactive.Value do
             wait()
             if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = plr.Character.HumanoidRootPart
+                local playerPos = hrp.Position
+                
+                -- Check for nearby players (within 100 studs)
+                local nearbyPlayer = false
+                for _, otherPlayer in pairs(Players:GetPlayers()) do
+                    if otherPlayer ~= plr and otherPlayer.Character and otherPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        local otherHrp = otherPlayer.Character.HumanoidRootPart
+                        local distance = (playerPos - otherHrp.Position).Magnitude
+                        if distance <= 100 then
+                            nearbyPlayer = true
+                            print("[Christmas Farm] Player detected within 100 studs:", otherPlayer.Name, "Distance:", math.floor(distance))
+                            break
+                        end
+                    end
+                end
+                
+                -- If nearby player detected, teleport to safe spot immediately
+                if nearbyPlayer then
+                    print("[Christmas Farm] Player nearby! Teleporting to safe spot...")
+                    features.gotosafespot()
+                    
+                    -- Wait until out of combat before server hopping
+                    print("[Christmas Farm] Waiting to be out of combat before serverhopping...")
+                    local waitStartTime = tick()
+                    local maxWaitTime = 30 -- Maximum 30 seconds wait
+                    
+                    while tick() - waitStartTime < maxWaitTime do
+                        local outOfCombat = false
+                        if RS.Settings:FindFirstChild(user) and RS.Settings[user]:FindFirstChild("CombatCount") then
+                            if RS.Settings[user].CombatCount.Value <= 3 then
+                                outOfCombat = true
+                            end
+                        else
+                            -- If CombatCount doesn't exist, assume out of combat
+                            outOfCombat = true
+                        end
+                        
+                        if outOfCombat then
+                            print("[Christmas Farm] Out of combat! Serverhopping...")
+                            task.wait(0.5)
+                            features.TeleportRandomServer()
+                            return
+                        end
+                        
+                        task.wait(0.5)
+                    end
+                    
+                    -- If we've waited too long, server hop anyway
+                    warn("[Christmas Farm] Waited too long for combat to end, serverhopping anyway...")
+                    features.TeleportRandomServer()
+                    return
+                end
+                
                 local bossthere, bosshrp, bossname = checkbossstatus()
                 if bossthere and bosshrp then
                     lookingforbosscounter = 0
