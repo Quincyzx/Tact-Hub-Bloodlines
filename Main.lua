@@ -4444,11 +4444,11 @@ features.ChristmasFarm = function()
 
         -- Main farm loop
         local lookingforbosscounter = 0
-        local playerDetectionActive = true
+        local playerDetected = false -- Flag to stop farming when player detected
         
         -- Continuous player detection in separate thread
         spawn(function()
-            while christmasfarmactive.Value and playerDetectionActive do
+            while christmasfarmactive.Value and not playerDetected do
                 task.wait(0.5) -- Check every 0.5 seconds
                 
                 if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then
@@ -4496,12 +4496,12 @@ features.ChristmasFarm = function()
                 
                 -- If nearby player detected, teleport to safe spot immediately
                 if nearbyPlayer then
-                    playerDetectionActive = false -- Stop detection to prevent multiple triggers
+                    playerDetected = true -- Stop main loop from continuing
                     
                     print("[Christmas Farm] ========== PLAYER DETECTED ==========")
                     print("[Christmas Farm] Player Name:", nearbyPlayerName)
                     print("[Christmas Farm] Distance:", math.floor(nearbyPlayerDistance), "studs")
-                    print("[Christmas Farm] Teleporting to safe spot...")
+                    print("[Christmas Farm] Stopping farm and teleporting to safe spot...")
                     
                     local teleportSuccess, teleportErr = pcall(function()
                         features.gotosafespot()
@@ -4573,10 +4573,9 @@ features.ChristmasFarm = function()
             end
         end)
         
-        while christmasfarmactive.Value do
+        while christmasfarmactive.Value and not playerDetected do
             wait()
             if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                
                 local bossthere, bosshrp, bossname = checkbossstatus()
                 if bossthere and bosshrp then
                     lookingforbosscounter = 0
@@ -4590,6 +4589,12 @@ features.ChristmasFarm = function()
                     end
                 end
             end
+        end
+        
+        -- If player was detected, the detection thread handles teleport/serverhop
+        if playerDetected then
+            print("[Christmas Farm] Farm stopped due to nearby player detection")
+            return
         end
 
         -- Cleanup
